@@ -4,12 +4,13 @@
 <title>LocalCorrect — Outlook RC</title><link rel="stylesheet" href="./taskpane.css">
 <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" defer></script><script src="./taskpane.js" defer></script>
 </head><body><main><h1>LocalCorrect <small>RC 1</small></h1>
-<p>Selected-text spelling correction. Processing stays in this task pane. Outlook itself still uses the network.</p>
-<p><strong>Outlook on the web · new HTML messages only.</strong> Select your own text, not signatures or quoted messages. Do not type or move the selection during correction.</p>
+<p>Selected-text spelling correction, output only. Processing stays in this task pane. Outlook itself still uses the network.</p>
+<p><strong>Outlook on the web · new HTML messages only.</strong> Select your own text, not signatures or quoted messages. Keep the selection stable while reading. The draft is never changed by this add-in.</p>
 <label for="language">Language</label><select id="language"><option value="en">English (EN)</option><option value="de">Deutsch (DE)</option></select>
 <label for="mode">Mode</label><select id="mode"><option value="conservative">Conservative</option><option value="balanced">Balanced</option></select>
 <section id="demo-editor" hidden><label for="draft">Synthetic demo text (never saved)</label><textarea id="draft" rows="8">This is a mesage to recieve.</textarea></section>
-<div class="actions"><button id="correct" disabled>Correct</button><button id="undo" disabled>Undo</button></div>
+<div class="actions"><button id="correct" disabled>Correct</button><button id="copy" disabled>Copy plain text</button><button id="clear">Clear output</button></div>
+<label for="output">Corrected output — review before copying</label><textarea id="output" rows="8" readonly spellcheck="false" autocomplete="off"></textarea>
 <p id="summary" role="status" aria-live="polite">Loading local dictionaries and Outlook…</p>
-<p class="note">Undo requires reselecting exactly the corrected phrase, with no draft edits since correction. Reloading discards Undo. No send, draft-save, telemetry or text API calls.</p>
+<p class="note">Copy is explicit and plain text: rich formatting is lost when pasting. Clipboard history or device sync may retain copied text outside this add-in. Clear output does not clear the OS clipboard. Output is memory-only; no send, draft-save, telemetry or text API calls.</p>
 </main></body></html>

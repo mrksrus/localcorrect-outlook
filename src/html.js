@@ -23,14 +23,28 @@ export function parse(html, Parser) {
   if (!Parser) throw new Error('Inert HTML parser unavailable.');
   return new Parser().parseFromString(html, 'text/html');
 }
-function leaves(root) {
-  const output = [];
+// Logical plain text plus offsets into original text nodes. Structural separators
+// are synthetic: never editable and never rendered as active draft HTML.
+export function logicalText(root) {
+  let text = '', trailingSynthetic = false;
+  const spans = [];
+  const block = n => /^(P|DIV|BLOCKQUOTE)$/.test(n.tagName);
+  const separator = () => { if (text && !text.endsWith('\n')) { text += '\n'; trailingSynthetic = true; } };
   function visit(n) {
-    if (n.nodeType === 3) output.push(n);
-    else for (const child of n.childNodes) visit(child);
+    if (n.nodeType === 3) {
+      const start = text.length; text += n.data; if (n.data) trailingSynthetic = false;
+      spans.push({ node: n, start, end: text.length, edits: [] });
+    } else if (n.tagName === 'BR' || n.tagName === 'HR') { text += '\n'; trailingSynthetic = false; }
+    else {
+      if (block(n)) separator();
+      for (const child of n.childNodes) visit(child);
+      if (block(n)) separator();
+    }
   }
-  visit(root);
-  return output;
+  for (const child of root.childNodes) visit(child);
+  // Drop only a trailing synthetic block separator, not explicit BR/text breaks.
+  if (trailingSynthetic) text = text.slice(0, -1);
+  return { text, spans };
 }
 function protectedNode(node) {
   for (let el = node.parentElement; el; el = el.parentElement) {
@@ -49,43 +63,21 @@ export function fragment(html, Parser) {
       if (!['style', 'class', 'color', 'size', 'face', 'lang', 'dir'].includes(attr.name.toLowerCase()) || /url\s*\(|expression\s*\(|javascript:|@import/i.test(attr.value)) throw new Error('Unsupported selection attributes.');
     }
   }
-  const nodes = leaves(root);
-  const text = nodes.map(n => n.data).join('');
+  const { text, spans } = logicalText(root);
   if (!text.trim() || text.length > 20000) throw new Error('Select 1–20,000 characters in the message body.');
   if (boundary.test(text)) throw new Error('Selection contains a quote or signature boundary.');
-  return { root, nodes, text };
+  return { root, spans, text };
 }
 export function assertSelectionSafe(bodyHtml, selection, Parser) {
   const doc = parse(bodyHtml, Parser);
-  const nodes = leaves(doc.body);
-  const full = nodes.map(n => n.data).join('');
+  const { text: full, spans } = logicalText(doc.body);
   const offset = full.indexOf(selection.text);
   if (offset < 0 || full.indexOf(selection.text, offset + 1) >= 0) throw new Error('Selection cannot be located uniquely; select a longer unique phrase.');
-  let pos = 0;
-  for (const node of nodes) {
-    const end = pos + node.data.length;
-    if (end > offset && pos < offset + selection.text.length && protectedNode(node)) throw new Error('Quotes, signatures, links and code are protected.');
-    pos = end;
+  for (const { node, start, end } of spans) {
+    if (end > offset && start < offset + selection.text.length && protectedNode(node)) throw new Error('Quotes, signatures, links and code are protected.');
   }
-  // Boundaries include structural line breaks, unlike textContent.
-  let rendered = '';
-  let selectedStart = -1;
-  let selectedEnd = -1;
-  let flatPos = 0;
-  function visit(n) {
-    if (n.nodeType === 3) {
-      if (offset >= flatPos && offset < flatPos + n.data.length) selectedStart = rendered.length + offset - flatPos;
-      if (offset + selection.text.length > flatPos && offset + selection.text.length <= flatPos + n.data.length) selectedEnd = rendered.length + offset + selection.text.length - flatPos;
-      rendered += n.data; flatPos += n.data.length;
-    } else {
-      if (/^(P|DIV|BR|BLOCKQUOTE|HR)$/.test(n.tagName)) rendered += '\n';
-      for (const child of n.childNodes) visit(child);
-      if (/^(P|DIV|BLOCKQUOTE)$/.test(n.tagName)) rendered += '\n';
-    }
-  }
-  visit(doc.body);
-  const cut = rendered.search(boundary);
-  if (selectedStart < 0 || selectedEnd < 0 || (cut >= 0 && selectedEnd > cut)) throw new Error('Selection is at or after a signature/quoted-message boundary.');
+  const cut = full.search(boundary);
+  if (cut >= 0 && offset + selection.text.length > cut) throw new Error('Selection is at or after a signature/quoted-message boundary.');
   return { offset };
 }
 export function correctFragment(selection, corrector, options) {
@@ -101,8 +93,9 @@ export function correctFragment(selection, corrector, options) {
   let reconstructed = selection.text;
   for (const e of [...result.edits].reverse()) reconstructed = reconstructed.slice(0, e.offset) + e.replacement + reconstructed.slice(e.offset + e.length);
   if (reconstructed !== result.text) throw new Error('Core text/edit contract violation.');
-  let offset = 0, count = 0, skipped = result.skipped;
-  const spans = selection.nodes.map(node => { const start = offset; offset += node.data.length; return { node, start, end: offset, edits: [] }; });
+  let count = 0, skipped = result.skipped;
+  const spans = selection.spans;
+  const accepted = [];
   for (const edit of result.edits) {
     const span = spans.find(s => edit.offset >= s.start && edit.offset + edit.length <= s.end);
     if (!span) { skipped++; continue; } // Never redistribute edits across markup.
@@ -110,11 +103,13 @@ export function correctFragment(selection, corrector, options) {
     const before = selection.text[edit.offset - 1] || '';
     const after = selection.text[edit.offset + edit.length] || '';
     if (/[\p{L}\p{M}]/u.test(before) || /[\p{L}\p{M}]/u.test(after)) { skipped++; continue; }
-    span.edits.push(edit); count++;
+    span.edits.push(edit); accepted.push(edit); count++;
   }
   for (const span of spans) for (const edit of span.edits.reverse()) {
     const local = edit.offset - span.start;
     span.node.data = span.node.data.slice(0, local) + edit.replacement + span.node.data.slice(local + edit.length);
   }
-  return { html: selection.root.innerHTML, text: selection.root.textContent, count, skipped };
+  let text = selection.text;
+  for (const e of accepted.reverse()) text = text.slice(0, e.offset) + e.replacement + text.slice(e.offset + e.length);
+  return { html: selection.root.innerHTML, text, count, skipped };
 }

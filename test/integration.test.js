@@ -4,7 +4,8 @@ import { readFile, access } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { fragment, correctFragment } from '../src/html.js';
-import { Parser } from './helpers.js';
+import { Parser, officeMock } from './helpers.js';
+import { Controller } from '../src/controller.js';
 const core = path.resolve('build/core-source');
 let available = true;
 try { await access(path.join(core, 'src/index.js')); } catch { available = false; }
@@ -26,12 +27,26 @@ test('REAL shared core: EN/DE contract and HTML correction', { skip: !available 
     const patched = correctFragment(fragment(`<b>${language === 'en' ? 'teh message' : 'Nachrciht'}</b>`, Parser), corrector, { language, mode });
     assert.ok(patched.html.startsWith('<b>') && patched.html.endsWith('</b>'));
   }
+  for (const language of ['en', 'de']) for (const mode of ['conservative', 'balanced']) for (const name of ['Alyce', 'Harriett', 'Conners', 'Hasting']) {
+    const { Office, state } = officeMock();
+    state.body = `<p>${language === 'en' ? 'Ask' : 'Bitte'} ${name} ${language === 'en' ? 'to attend.' : 'einladen.'}</p>`;
+    state.selected = name;
+    const controller = new Controller({ Office, corrector, Parser });
+    const before = state.body;
+    const output = await controller.correct({ language, mode });
+    assert.equal(output.text, name, `selected name ${name}/${language}/${mode}`);
+    assert.equal(state.body, before); assert.equal(state.writes.length, 0);
+  }
   const typo = corrector.correct('recieve', { language: 'en', mode: 'balanced' });
   assert.equal(typo.text, 'receive', 'real core must perform a real correction');
   const german = corrector.correct('Nachrciht', { language: 'de', mode: 'balanced' });
   assert.equal(german.text, 'Nachricht', 'German real core correction');
   const unicode = corrector.correct('😀 recieve', { language: 'en', mode: 'balanced' });
   assert.equal(unicode.edits[0].offset, 3, 'offsets use original UTF-16 units');
+  for (const html of ['<p>Please recieve</p><p>tomorrow.</p>', '<div>Please recieve</div><div>tomorrow.</div>', 'Please recieve<br>tomorrow.']) {
+    const corrected = correctFragment(fragment(html, Parser), corrector, { language: 'en', mode: 'balanced' });
+    assert.equal(corrected.text, 'Please receive\ntomorrow.'); assert.equal(corrected.count, 1);
+  }
   const protectedSplit = correctFragment(fragment('<b>https://exa</b>mpel.invalid a@exa<b>mpel.invalid</b> REF-123 12345', Parser), corrector, { language: 'en', mode: 'balanced' });
   assert.equal(protectedSplit.count, 0, 'whole-selection core protects URLs/addresses across markup');
   assert.equal(protectedSplit.text, 'https://exampel.invalid a@exampel.invalid REF-123 12345');
