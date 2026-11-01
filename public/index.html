@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'"><title>LocalCorrect Outlook — release candidate</title></head><body>
+<main><h1>LocalCorrect Outlook — 1.0.0-rc.1</h1>
+<p>Open-source, on-device English and German typo correction. No LLM, telemetry or draft-processing server.</p>
+<p><strong>Release candidate. Test with synthetic text first.</strong> This candidate supports selected text in new HTML messages in Outlook on the web. It produces corrected plain text: review, Copy, then paste deliberately. It never writes to or sends your draft. Clipboard history and device synchronisation remain outside its control.</p>
+<h2>Install for an owner-test</h2><ol><li>Download the <a href="manifest.xml">Outlook manifest</a>.</li><li>Where your account and organisation permit it, open Outlook's custom-add-in installation and add that manifest from file.</li><li>Open a new HTML message, select your own newly written prose, open LocalCorrect and press Correct.</li></ol>
+<p>Requires a supported Microsoft 365/Exchange Online or Outlook.com mailbox and permission to sideload. Desktop Windows, Mac, mobile, replies, forwards and arbitrary IMAP accounts are not supported by this candidate. Real Outlook installation is not yet verified.</p>
+<p><a href="demo.html">Synthetic-text demo</a> · <a href="support.html">Support</a> · <a href="https://github.com/mrksrus/localcorrect-outlook/releases/tag/v1.0.0-rc.1">Release downloads and instructions</a> · <a href="https://github.com/mrksrus/localcorrect-outlook">Source, privacy and self-hosting</a></p>
+<p>Correction runs in your browser. This public site serves static code and dictionaries; GitHub and the required Office.js CDN receive ordinary asset requests, not application-submitted draft contents. You can self-host the reviewed assets instead. This does not make Outlook itself offline or control other extensions.</p>
+</main></body></html>

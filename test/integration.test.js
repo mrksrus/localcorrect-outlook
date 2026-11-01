@@ -39,8 +39,10 @@ test('REAL shared core: EN/DE contract and HTML correction', { skip: !available 
   }
   const typo = corrector.correct('recieve', { language: 'en', mode: 'balanced' });
   assert.equal(typo.text, 'receive', 'real core must perform a real correction');
-  const german = corrector.correct('Nachrciht', { language: 'de', mode: 'balanced' });
-  assert.equal(german.text, 'Nachricht', 'German real core correction');
+  const german = corrector.correct('Vielen Dank für Ihre Nachrciht.', { language: 'de', mode: 'balanced' });
+  assert.equal(german.text, 'Vielen Dank für Ihre Nachricht.', 'German noun-context real core correction');
+  const germanFragment = corrector.correct('Nachrciht', { language: 'de', mode: 'balanced' });
+  assert.equal(germanFragment.text, 'Nachrciht', 'isolated unknown titlecase token abstains without noun context');
   const unicode = corrector.correct('😀 recieve', { language: 'en', mode: 'balanced' });
   assert.equal(unicode.edits[0].offset, 3, 'offsets use original UTF-16 units');
   for (const html of ['<p>Please recieve</p><p>tomorrow.</p>', '<div>Please recieve</div><div>tomorrow.</div>', 'Please recieve<br>tomorrow.']) {

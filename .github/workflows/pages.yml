@@ -1,0 +1,53 @@
+name: Publish public add-in assets
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Read exact core revision
+        id: core
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("core-source.json")); if(p.repository!=="mrksrus/localcorrect-browser"||!/^[a-f0-9]{40}$/.test(p.ref)) throw new Error("Invalid core pin"); fs.appendFileSync(process.env.GITHUB_OUTPUT,`repository=${p.repository}\nref=${p.ref}\n`);'
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.core.outputs.repository }}
+          ref: ${{ steps.core.outputs.ref }}
+          path: .core-checkout
+          persist-credentials: false
+      - run: npm run build -- --core .core-checkout --base-url https://mrksrus.github.io/localcorrect-outlook --release
+      - run: npm test && npm run test:integration && npm run validate
+      - run: cp build/manifest.xml build/site/manifest.xml
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/site
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy reviewed assets
+        id: deployment
+        uses: actions/deploy-pages@v4

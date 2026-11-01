@@ -29,7 +29,7 @@ npm run test:integration
 npm run validate
 ```
 
-This is a **development build** until the maintainer fills the reviewed repository/full 40-character commit in `core-source.json`. Final parent build:
+The companion repository and full reviewed-core candidate revision are recorded in `core-source.json`. For the pinned RC build:
 
 ```sh
 npm run build -- --core ../localcorrect-browser --base-url https://mrksrus.github.io/localcorrect-outlook --release
@@ -38,13 +38,13 @@ npm run test:integration
 npm run validate
 ```
 
-`--release` refuses an absent/mismatched pin or dirty `packages/core`. `--require-clean-core` enables the clean-package gate for development too. Build compiles the copied source snapshot, records its tree SHA-256/available HEAD and release flag in `build/build-info.json`, and creates `dist/localcorrect-outlook-1.0.0-rc.1.zip` plus checksum. Identical inputs yield deterministic ZIPs. The ZIP includes assets, manifest, source/lockfile/tests/scripts, actual core/dictionaries, full licenses/provenance and tooling dependency notices. No fake installer or published substitute engine is used. CI intentionally fails until the reviewed core pin is filled.
+`--release` refuses an absent/mismatched pin or dirty `packages/core`. `--require-clean-core` enables the clean-package gate for development too. Build compiles the copied source snapshot, records its tree SHA-256/available HEAD and release flag in `build/build-info.json`, and creates `dist/localcorrect-outlook-1.0.0-rc.1.zip` plus checksum. Identical inputs yield deterministic ZIPs. The ZIP includes assets, manifest, source/lockfile/tests/scripts, actual core/dictionaries, full licenses/provenance and tooling dependency notices. No fake installer or published substitute engine is used. CI verifies the exact committed core pin. The separate manual Pages workflow builds and validates that same pin before deploying static assets; no draft-processing backend is deployed.
 
 To rebuild from ZIP, use `outlook-source` as this checkout; place `core-source` at a sibling checkout's `packages/core`, restore `shared-notices` at that sibling root (move `dictionaries.py` into `scripts/`), then use a development build. A source-only reconstruction has no reviewed Git HEAD, so cannot meet `--release` without the actual pinned checkout.
 
 ## Installation: hosted assets or local HTTPS
 
-A manifest needs reachable HTTPS assets; it does not embed them. The planned public base is `https://mrksrus.github.io/localcorrect-outlook`. **This repository change does not deploy or verify that URL.** Once the maintainer hosts `build/site/` there, users do not need a local server. Use the matching release `manifest.xml`. Do not sideload a localhost manifest expecting public assets.
+A manifest needs reachable HTTPS assets; it does not embed them. The public asset base is `https://mrksrus.github.io/localcorrect-outlook`; see the release notes for deployment verification status. The [installation page](https://mrksrus.github.io/localcorrect-outlook/) supplies the matching manifest when deployed. Hosted installation does not require a user local server. Use the matching release `manifest.xml`. Do not sideload a localhost manifest expecting public assets.
 
 Where custom add-ins are allowed: Outlook on the web **Apps/Get Add-ins → My add-ins → Add custom add-in → Add from file**, select `build/manifest.xml`. Microsoft changes this UI; tenant policy may block it. See [official sideload instructions](https://learn.microsoft.com/en-us/office/dev/add-ins/outlook/sideload-outlook-add-ins-for-testing). Remove the custom add-in to uninstall; remove local/hosted assets separately. No test message needs sending.
 

@@ -1,5 +1,5 @@
 {
-  "repository": "",
-  "ref": "",
-  "releaseGate": "Maintainer must fill the companion browser repository and reviewed full 40-character commit before publication. Local builds use --core explicitly."
+  "repository": "mrksrus/localcorrect-browser",
+  "ref": "786ef9c89101ce9459d4f5b138009daa54a31346",
+  "releaseGate": "Exact companion core selected after the first review/fix cycle; final independent RC review and local release validation required before publication."
 }
