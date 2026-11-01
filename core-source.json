@@ -1,5 +1,5 @@
 {
   "repository": "mrksrus/localcorrect-browser",
-  "ref": "786ef9c89101ce9459d4f5b138009daa54a31346",
+  "ref": "c67cc4c8e3107084bff0606c00d08e1c7da58ba1",
   "releaseGate": "Exact companion core selected after the first review/fix cycle; final independent RC review and local release validation required before publication."
 }
