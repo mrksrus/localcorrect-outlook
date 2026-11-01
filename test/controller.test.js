@@ -1,0 +1,32 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { Controller, officeCall } from '../src/controller.js';
+import { Parser, fakeCorrector, officeMock } from './helpers.js';
+const options = { language: 'en', mode: 'conservative' };
+function setup() { const mock = officeMock(); return { ...mock, c: new Controller({ Office: mock.Office, corrector: fakeCorrector, Parser, timeoutMs: 100 }) }; }
+test('selection write preserves surrounding HTML; guarded reselected Undo', async () => {
+  const { c, state } = setup(); const original = state.body;
+  assert.deepEqual(await c.correct(options), { count: 1, skipped: 0 });
+  assert.equal(state.body, original.replace('teh', 'the'));
+  assert.equal(state.writes[0].options.coercionType, 'html');
+  await assert.rejects(c.undo(), /Select|select/);
+  state.selected = '<b>the message</b>';
+  await c.undo(); assert.equal(state.body, original); assert.equal(c.history, null);
+});
+test('changed body cancels correction without write', async () => { const { c, state } = setup(); state.mutateAt = 2; await assert.rejects(c.correct(options), /changed/); assert.equal(state.writes.length, 0); });
+test('changed selection cancels correction without write', async () => { const { c, state } = setup(); state.changedSelectionAt = 2; await assert.rejects(c.correct(options), /changed/); assert.equal(state.writes.length, 0); });
+test('Undo after any user edit is discarded', async () => { const { c, state } = setup(); await c.correct(options); state.body += ' edit'; state.selected = '<b>the message</b>'; await assert.rejects(c.undo(), /Draft changed/); assert.equal(state.writes.length, 1); assert.equal(c.history, null); });
+test('Undo preflight detects change during read', async () => { const { c, state } = setup(); await c.correct(options); state.selected = '<b>the message</b>'; state.mutateAt = state.reads + 2; await assert.rejects(c.undo(), /changed/); assert.equal(state.writes.length, 1); });
+test('concurrent operations rejected', async () => { const { c, state } = setup(); state.delay = 5; const work = c.correct(options); await assert.rejects(c.correct(options), /already running/); await assert.rejects(c.undo(), /already running/); await work; assert.equal(state.writes.length, 1); });
+for (const api of ['body', 'selection', 'compose', 'write']) test(`callback error: ${api}`, async () => { const { c, state } = setup(); state.fail = api; await assert.rejects(c.correct(options), /API operation failed/); assert.equal(c.busy, false); assert.equal(c.history, null); if (api === 'write') { assert.equal(c.blocked, true); await assert.rejects(c.correct(options), /uncertain/); } });
+test('missing callbacks time out; late callback ignored', async () => { let callback; await assert.rejects(officeCall(cb => { callback = cb; }, 5), /did not respond/); callback({ status: 'succeeded', value: 'late' }); });
+test('synchronous Office throw contained', async () => { await assert.rejects(officeCall(() => { throw new Error('private contents'); }), /unavailable/); });
+test('invalid result is failure', async () => { await assert.rejects(officeCall(cb => cb(null)), /failed/); });
+test('unsupported client refuses write', async () => { const { c, Office, state } = setup(); Office.context.platform = 'PC'; await assert.rejects(c.correct(options), /web only/); assert.equal(state.writes.length, 0); });
+test('unsupported requirement refuses write', async () => { const { c, Office } = setup(); Office.context.requirements.isSetSupported = () => false; await assert.rejects(c.correct(options), /Mailbox/); });
+for (const composeType of ['reply', 'forward']) test(`refuses ${composeType}`, async () => { const { c, state } = setup(); state.composeType = composeType; await assert.rejects(c.correct(options), /new HTML/); assert.equal(state.writes.length, 0); });
+test('refuses plain-text composition', async () => { const { c, state } = setup(); state.coercionType = 'text'; await assert.rejects(c.correct(options), /new HTML/); });
+test('subject selection refused', async () => { const { c, state } = setup(); state.source = 'subject'; await assert.rejects(c.correct(options), /not the subject/); });
+test('different item cancels delayed read', async () => { const { c, state, Office } = setup(); state.delay = 10; const work = c.correct(options); setTimeout(() => { Office.context.mailbox.item = {}; }, 15); await assert.rejects(work, /Message changed/); assert.equal(state.writes.length, 0); });
+test('write timeout blocks retries', async () => { const { c, Office } = setup(); Office.context.mailbox.item.setSelectedDataAsync = () => {}; await assert.rejects(c.correct(options), /did not respond/); assert.equal(c.blocked, true); await assert.rejects(c.undo(), /uncertain/); });
+test('rejects malformed options', async () => { const { c } = setup(); await assert.rejects(c.correct({ language: 'xx', mode: 'fast' }), /Invalid/); });

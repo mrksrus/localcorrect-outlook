@@ -1,0 +1,7 @@
+# Synthetic fixture scope
+
+`helpers.js` supplies a fake Office object, not a mailbox connection. All message text, API errors, signatures and quote boundaries in the tests are invented. The fake setter replaces only the synthetic selected fragment and never exposes a full-body setter. `html.test.js` exercises supported formatting, unsafe HTML refusal, protected quotes/signatures, cross-node words and UTF-16 edit checks. `controller.test.js` exercises callback failures/timeouts, stale body and selection, concurrent requests, changed item, refused reply/forward/plain-text/client paths and guarded Undo. `integration.test.js` uses the **real copied core and both dictionaries** after build; the explicit npm integration command fails when that core is missing.
+
+Optional manual native-browser smoke check: serve the compiled demo on loopback, Correct the synthetic sample, Undo, edit and verify Undo refuses stale content. The demo is a plain textarea, not an Outlook test. Native inert-template HTML parsing and real-core correction were separately exercised in Chromium with a synthetic Office object during RC development. No real mail was used. Office normalization, host framing/CSP behavior and real sideloading still require maintainer verification.
+
+Important limitation: mock preflight checks prove detected stale reads are refused. They do not prove atomicity of Office's selection API. A final-read/write race remains possible in real Outlook, as documented in README/SECURITY. Never describe these mocks as a live Outlook or Windows installation test.

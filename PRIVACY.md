@@ -1,0 +1,9 @@
+# Privacy
+
+Draft correction is performed in the task pane by the bundled local engine. Only the current composing item's body and explicitly selected fragment are read through Office.js for safety checks. No mailbox enumeration, recipients, attachments, message history, identity tokens or send API is used. Replies/forwards are refused.
+
+The application has no telemetry, analytics, text service, remote correction API, account registration, cookies, localStorage, IndexedDB, service worker or draft logging. Temporary snapshots and Undo remain in JavaScript memory until the pane closes; garbage collection is not secure memory erasure. Outlook itself may save/synchronize drafts according to its own settings; this add-in never invokes draft saving.
+
+Network: static scripts, styles, dictionaries and icons come from the configured asset origin. The Microsoft Office.js library is loaded from Microsoft's required CDN. The add-in's CSP permits only its own asset origin and the required Office CDN for scripts/connections/frames, with self/data images. Office/Outlook and Microsoft's scripts have their own network/privacy behavior beyond the correction engine; **the entire Outlook runtime is not offline**. Hosting/CDN operators can see ordinary asset-request metadata such as IP address and user agent, not draft text from our code. Deploy without access-log query collection, injected analytics or URL rewriting that includes content.
+
+Manifest permission `ReadWriteItem` permits modifying the open compose item and is broader than the APIs actually used; it is required for selected-text replacement. It is not `ReadWriteMailbox`. No OAuth permissions are requested. Review source and hosting configuration before using confidential material. Never put real mail in the standalone synthetic demo or test fixtures.

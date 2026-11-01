@@ -1,0 +1,7 @@
+node_modules/
+build/
+dist/
+coverage/
+.core-checkout/
+*.log
+__pycache__/

@@ -1,0 +1,38 @@
+name: Outlook release-candidate validation
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - name: Read reviewed core pin (intentional release gate)
+        id: core
+        shell: bash
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("core-source.json")); if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(p.repository)||!/^\b[a-f0-9]{40}$/.test(p.ref)) throw new Error("Maintainer must pin companion core repository and full commit before release"); fs.appendFileSync(process.env.GITHUB_OUTPUT,`repository=${p.repository}\nref=${p.ref}\n`);'
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.core.outputs.repository }}
+          ref: ${{ steps.core.outputs.ref }}
+          path: .core-checkout
+          persist-credentials: false
+      - run: npm run build -- --core .core-checkout --base-url https://localhost:3000
+      - run: npm run test:integration
+      - run: npm run validate
+      - name: Reproducible ZIP
+        run: |
+          cp dist/localcorrect-outlook-1.0.0-rc.1.zip ../first.zip
+          npm run build -- --core .core-checkout --base-url https://localhost:3000
+          cmp ../first.zip dist/localcorrect-outlook-1.0.0-rc.1.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: localcorrect-outlook-1.0.0-rc.1
+          path: dist/*

@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { fragment, assertSelectionSafe, correctFragment } from '../src/html.js';
+import { Parser, fakeCorrector } from './helpers.js';
+const options = { language: 'en', mode: 'conservative' };
+test('formatting retained and HTML escaped', () => { const f = fragment('<b>teh</b> &amp; <i>message</i>', Parser); const result = correctFragment(f, fakeCorrector, options); assert.equal(result.html, '<b>the</b> &amp; <i>message</i>'); });
+test('split word across inline markup skipped', () => { const f = fragment('<b>teh</b>re', Parser); assert.equal(correctFragment(f, fakeCorrector, options).count, 0); });
+for (const html of ['<a href="https://example.invalid">teh</a>', '<script>teh</script>', '<img src="https://example.invalid/pixel">', '<span onclick="x()">teh</span>', '<span style="background:url(https://example.invalid)">teh</span>', '<blockquote>teh</blockquote>']) test(`refuses unsafe fragment ${html.slice(0, 30)}`, () => assert.throws(() => fragment(html, Parser)));
+for (const container of ['<blockquote>teh phrase</blockquote>', '<div id="Signature">teh phrase</div>', '<div class="gmail_quote">teh phrase</div>', '<div>-- </div><div>teh phrase</div>', '<div>From: Person</div><div>teh phrase</div>']) test(`protects body ${container.slice(0, 30)}`, () => assert.throws(() => assertSelectionSafe(container, fragment('teh phrase', Parser), Parser)));
+test('ambiguous repeated text refused', () => assert.throws(() => assertSelectionSafe('<p>teh phrase</p><p>teh phrase</p>', fragment('teh phrase', Parser), Parser), /uniquely/));
+test('own text before signature allowed', () => assertSelectionSafe('<p>teh phrase</p><div id="Signature">Name</div>', fragment('teh phrase', Parser), Parser));
+test('bad edit offsets and overlap rejected', () => { const core = { correct: () => ({ text: 'x', skipped: 0, edits: [{ offset: 0, length: 3, original: 'teh', replacement: 'the' }, { offset: 1, length: 1, original: 'e', replacement: 'x' }] }) }; assert.throws(() => correctFragment(fragment('teh', Parser), core, options), /contract/); });
+test('replacement markup becomes text, not executable HTML', () => { const core = { correct: () => ({ text: '<img src=x>', skipped: 0, edits: [{ offset: 0, length: 3, original: 'teh', replacement: '<img src=x>' }] }) }; assert.match(correctFragment(fragment('teh', Parser), core, options).html, /&lt;img/); });

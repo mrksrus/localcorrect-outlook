@@ -1,0 +1,5 @@
+{
+  "repository": "",
+  "ref": "",
+  "releaseGate": "Maintainer must fill the companion browser repository and reviewed full 40-character commit before publication. Local builds use --core explicitly."
+}
