@@ -25,6 +25,7 @@ jobs:
           path: .core-checkout
           persist-credentials: false
       - run: npm run build -- --core .core-checkout --base-url https://mrksrus.github.io/localcorrect-outlook --release
+      - run: npm test
       - run: npm run test:integration
       - run: npm run validate
       - name: Reproducible ZIP
