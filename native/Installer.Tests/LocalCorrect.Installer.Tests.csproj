@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><TargetFrameworks>net48;net10.0</TargetFrameworks><OutputType>Exe</OutputType></PropertyGroup>
+<ItemGroup><Compile Include="../Installer/OwnedInstallation.cs" Link="OwnedInstallation.cs" /></ItemGroup>
+</Project>

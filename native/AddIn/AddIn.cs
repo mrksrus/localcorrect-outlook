@@ -53,7 +53,7 @@ namespace LocalCorrect.Outlook {
             if (busy || disconnected) return;
             try {
                 dynamic inspector, doc; IntPtr hwnd;
-                if (!TryTarget(out inspector, out doc, out hwnd)) { Info("Open an editable email in its own compose window first. Tracked or protected documents are excluded."); return; }
+                if (!TryTarget(out inspector, out doc, out hwnd)) { if (!fromShortcut) Info("Open an editable email in its own compose window first. Tracked or protected documents are excluded."); return; }
                 if (fromShortcut && !HotkeyWindow.IsEditorFocused(hwnd)) return;
                 dynamic selection = doc.Application.Selection;
                 if (!Object.ReferenceEquals(selection.Document, doc) && !SameComObject(selection.Document, doc)) throw new InvalidOperationException("The email editor does not own the selection.");

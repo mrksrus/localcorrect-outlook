@@ -48,6 +48,15 @@ if (!process.argv.includes('--skip-tests')) {
     execFileSync(path.resolve('native/Engine.Tests/bin/Release/net48/LocalCorrect.Engine.Tests.exe'), [], { stdio: 'inherit' });
   }
 }
+if (!process.argv.includes('--skip-tests')) {
+  const project = 'native/Installer.Tests/LocalCorrect.Installer.Tests.csproj';
+  execFileSync(dotnet, ['restore', project, ...(process.argv.includes('--locked') ? ['--locked-mode'] : [])], { stdio: 'inherit' });
+  execFileSync(dotnet, ['run', '--project', project, '-f', 'net10.0', '-c', 'Release', '--no-restore'], { stdio: 'inherit' });
+  if (process.platform === 'win32') {
+    execFileSync(dotnet, ['build', project, '-f', 'net48', '-c', 'Release', '--no-restore'], { stdio: 'inherit' });
+    execFileSync(path.resolve('native/Installer.Tests/bin/Release/net48/LocalCorrect.Installer.Tests.exe'), [], { stdio: 'inherit' });
+  }
+}
 await rm('build/native', { recursive: true, force: true }); await mkdir('build/native/payload', { recursive: true });
 await cp('native/AddIn/bin/Release/net48', 'build/native/payload', { recursive: true, filter: p => !p.endsWith('.pdb') });
 for (const file of ['LICENSE', 'THIRD_PARTY.md', 'PRIVACY.md', 'SECURITY.md', 'native/README.md', 'native/assets/build-info.json']) await cp(file, `build/native/payload/${path.basename(file)}`);

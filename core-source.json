@@ -1,5 +1,5 @@
 {
   "repository": "mrksrus/localcorrect-browser",
-  "ref": "c67cc4c8e3107084bff0606c00d08e1c7da58ba1",
-  "releaseGate": "Exact companion core selected after the first review/fix cycle; final independent RC review and local release validation required before publication."
+  "ref": "76e283672efc0ad5afa09e3abea5d354c2fb595e",
+  "releaseGate": "Shared RC2 core, synthetic regression and browser checks passed; independent candidate review recorded separately. Native Windows engine/build CI and actual Office2019 acceptance are distinct checks."
 }

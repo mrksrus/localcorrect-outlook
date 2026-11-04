@@ -4,7 +4,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
-using System.Security.Cryptography;
 using System.Windows.Forms;
 using Microsoft.Win32;
 namespace LocalCorrect.Setup {
@@ -24,23 +23,24 @@ namespace LocalCorrect.Setup {
                         File.Copy(SetupPath, temporary);
                         Process.Start(new ProcessStartInfo(temporary, "/uninstall") { UseShellExecute = false }); return;
                     }
-                    if (MessageBox.Show("Remove LocalCorrect for this Windows user? Saved language and shortcut preferences will remain.", "LocalCorrect", MessageBoxButtons.OKCancel) == DialogResult.OK) { Uninstall(); MessageBox.Show("LocalCorrect was removed. Any modified files were retained.", "LocalCorrect"); }
+                    if (MessageBox.Show("Remove LocalCorrect for this Windows user? Saved language and shortcut preferences will remain.", "LocalCorrect", MessageBoxButtons.OKCancel) == DialogResult.OK) { Uninstall(); MessageBox.Show("LocalCorrect was removed. Any modified or unrelated files and their ownership records were retained.", "LocalCorrect"); }
                     return;
                 }
-                if (Directory.Exists(Root)) throw new InvalidOperationException("An existing LocalCorrect folder is present. Remove the existing installation from Windows Apps first. No files were replaced.");
                 using (var framework = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full"))
                     if (framework == null || Convert.ToInt32(framework.GetValue("Release", 0)) < 528040) throw new InvalidOperationException("Install Microsoft .NET Framework 4.8 before continuing.");
                 if (MessageBox.Show("Install LocalCorrect for classic Outlook 2019 for this Windows user?\n\nEnglish and German correction runs offline. This installs an unsigned COM add-in. Your existing Office security policies remain in force.\n\nClose Outlook first. New Outlook is not supported.", "LocalCorrect setup", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK) return;
-                Install();
-                MessageBox.Show("Installed. Start classic Outlook, pop out a compose window, and open the LocalCorrect tab. Ctrl+Shift+L corrects selected prose or the body. Change language and shortcut in Settings.\n\nAlways review changes before sending. Ctrl+Z undoes a correction.", "LocalCorrect");
+                string retained = Install();
+                MessageBox.Show("Installed. Start classic Outlook, pop out a compose window, and open the LocalCorrect tab. Ctrl+Shift+L corrects selected prose or the body. Change language and shortcut in Settings.\n\nAlways review changes before sending. Ctrl+Z undoes a correction." + (retained == null ? "" : "\n\nRetained files were moved intact to:\n" + retained), "LocalCorrect");
             } catch (Exception ex) { MessageBox.Show(ex.Message, "LocalCorrect setup", MessageBoxButtons.OK, MessageBoxIcon.Error); Environment.ExitCode = 1; }
         }
         static RegistryView[] Views => Environment.Is64BitOperatingSystem ? new[] { RegistryView.Registry32, RegistryView.Registry64 } : new[] { RegistryView.Registry32 };
-        static void Install() {
+        static string Install() {
             foreach (var view in Views) using (var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view)) {
                 foreach (var key in new[] { @"Software\Classes\CLSID\" + Clsid, @"Software\Classes\" + ProgId, @"Software\Microsoft\Office\Outlook\Addins\" + ProgId, UninstallKey })
                     using (var existing = hive.OpenSubKey(key)) if (existing != null) throw new InvalidOperationException("A conflicting LocalCorrect registration exists. No registry keys were changed.");
             }
+            if (Directory.Exists(Root)) OwnedInstallation.VerifyOwnership(Root, Owner);
+            string retained = null;
             string stage = Root + ".stage-" + Guid.NewGuid().ToString("N");
             try {
                 Directory.CreateDirectory(stage);
@@ -56,9 +56,15 @@ namespace LocalCorrect.Setup {
                 File.Copy(Assembly.GetExecutingAssembly().Location, Path.Combine(stage, Path.GetFileName(SetupPath)));
                 File.WriteAllText(Path.Combine(stage, "installation-owner.txt"), Owner);
                 var files = Directory.GetFiles(stage, "*", SearchOption.AllDirectories);
-                File.WriteAllLines(Path.Combine(stage, "installed-files.sha256"), files.Select(p => Hash(p) + "  " + p.Substring(stage.Length + 1)));
-                Directory.CreateDirectory(Path.GetDirectoryName(Root)); Directory.Move(stage, Root);
+                File.WriteAllLines(Path.Combine(stage, "installed-files.sha256"), files.Select(p => OwnedInstallation.Hash(p) + "  " + p.Substring(stage.Length + 1)));
+                Directory.CreateDirectory(Path.GetDirectoryName(Root));
+                if (Directory.Exists(Root)) retained = OwnedInstallation.ArchiveRetained(Root, Owner);
+                Directory.Move(stage, Root);
                 try { Register(); } catch { RemoveOwnedRegistrations(); DeleteOwnedFiles(); throw; }
+                return retained;
+            } catch {
+                if (retained != null && !Directory.Exists(Root) && Directory.Exists(retained)) Directory.Move(retained, Root);
+                throw;
             } finally { if (Directory.Exists(stage)) Directory.Delete(stage, true); }
         }
         static void Register() {
@@ -88,21 +94,9 @@ namespace LocalCorrect.Setup {
                 }
         }
         static void Uninstall() {
-            if (!File.Exists(Path.Combine(Root, "installation-owner.txt")) || File.ReadAllText(Path.Combine(Root, "installation-owner.txt")) != Owner) throw new InvalidOperationException("Installation ownership could not be verified. No files or registry keys were removed.");
+            OwnedInstallation.VerifyOwnership(Root, Owner);
             RemoveOwnedRegistrations(); DeleteOwnedFiles();
         }
-        static void DeleteOwnedFiles() {
-            string inventory = Path.Combine(Root, "installed-files.sha256");
-            foreach (string line in File.ReadAllLines(inventory)) {
-                if (line.Length < 67) continue;
-                string path = Path.GetFullPath(Path.Combine(Root, line.Substring(66)));
-                if (!path.StartsWith(Root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
-                if (File.Exists(path) && Hash(path) == line.Substring(0, 64)) File.Delete(path);
-            }
-            File.Delete(inventory);
-            foreach (var dir in Directory.GetDirectories(Root, "*", SearchOption.AllDirectories).OrderByDescending(p => p.Length)) if (!Directory.EnumerateFileSystemEntries(dir).Any()) Directory.Delete(dir);
-            if (!Directory.EnumerateFileSystemEntries(Root).Any()) Directory.Delete(Root);
-        }
-        static string Hash(string path) { using (var sha = SHA256.Create()) using (var f = File.OpenRead(path)) return BitConverter.ToString(sha.ComputeHash(f)).Replace("-", "").ToLowerInvariant(); }
+        static void DeleteOwnedFiles() { OwnedInstallation.DeleteOwnedFiles(Root, Owner); }
     }
 }
