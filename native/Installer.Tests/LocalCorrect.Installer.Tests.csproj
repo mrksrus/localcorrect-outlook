@@ -1,4 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><TargetFrameworks>net48;net10.0</TargetFrameworks><OutputType>Exe</OutputType></PropertyGroup>
+<!-- Explicit AnyCPU prevents Windows-only net48 RID inference during locked restore. -->
+<PropertyGroup Condition="'$(TargetFramework)' == 'net48'"><PlatformTarget>AnyCPU</PlatformTarget><Prefer32Bit>false</Prefer32Bit></PropertyGroup>
 <ItemGroup><Compile Include="../Installer/OwnedInstallation.cs" Link="OwnedInstallation.cs" /></ItemGroup>
 </Project>
