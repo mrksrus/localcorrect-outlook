@@ -11,3 +11,11 @@ The add-in project and distributed combined program are GPL-3.0-only; see LICENS
 - Project icons are original generated raster artwork, under this project's GPL-3.0-only license.
 
 The release ZIP includes corresponding add-in and copied core source. The browser core provenance notices must be complete before public distribution; a build with missing or provisional dictionary provenance is not an approved release. CI's upstream revision pin is also a release gate, not a claim inferred from package names.
+
+## Native desktop distribution
+
+The native installer has no Office.js dependency. It embeds the core with the same dictionary and lexicon licenses. `source/browser/packages/core` contains their complete source and notices. `source/outlook` contains the native add-in, installer and build sources.
+
+Runtime dependencies are pinned in `native/*/packages.lock.json`: Jint 4.17.0, Acornima 1.7.0 and the .NET Framework support packages System.Memory 4.5.5, System.Buffers 4.5.1, System.Numerics.Vectors 4.5.0 and System.Runtime.CompilerServices.Unsafe 6.0.0. Exact NuGet packages, nuspec license declarations and any shipped license/notice files are included under `third-party-packages`. Jint uses BSD-2-Clause and Acornima uses BSD-3-Clause. Microsoft support packages use MIT and carry their own license and third-party notices in the payload. Full copyright and license texts, including Acornima's inherited Esprima notice, are included under `native/licenses` in source and `licenses` in the installed payload. `sources.json` records pinned upstream URLs and hashes. Their own package metadata is authoritative. Sources: https://github.com/sebastienros/jint, https://github.com/adams85/acornima.
+
+Microsoft .NET Framework reference assemblies are build-time only. The installer requires .NET Framework 4.8 on the target device and does not redistribute the framework. No Office binaries or PIAs are bundled; the COM interfaces use Microsoft's published interface IDs.

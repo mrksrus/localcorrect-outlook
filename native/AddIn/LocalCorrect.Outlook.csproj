@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><TargetFramework>net48</TargetFramework><AssemblyName>LocalCorrect.Outlook</AssemblyName><Version>1.0.0</Version><GenerateAssemblyInfo>true</GenerateAssemblyInfo><AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects><GenerateBindingRedirectsOutputType>true</GenerateBindingRedirectsOutputType><CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies></PropertyGroup>
+<ItemGroup><ProjectReference Include="../Engine/LocalCorrect.Engine.csproj" /><Reference Include="System.Windows.Forms" /><Reference Include="System.Drawing" /><Reference Include="Microsoft.CSharp" /></ItemGroup>
+</Project>

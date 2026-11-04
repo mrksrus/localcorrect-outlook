@@ -1,0 +1,4 @@
+<Project>
+  <PropertyGroup><LangVersion>latest</LangVersion><Nullable>disable</Nullable><Deterministic>true</Deterministic><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile></PropertyGroup>
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'"><PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net48" Version="1.0.3" PrivateAssets="all" /></ItemGroup>
+</Project>

@@ -1,6 +1,12 @@
-# LocalCorrect Outlook — 1.0.0-rc.1
+# LocalCorrect Outlook 1.0.0-rc.1
 
-GPL-3.0-only. **Output-only release candidate**, not a final release or a verified live Outlook installation. English/German spelling correction runs locally using the actual portable `@localcorrect/core` from the companion browser repository. No grammar checker, LLM, native Windows installer or whole-email in-place correction is supplied.
+The native Windows candidate for **classic Outlook 2019** is in [`native/`](native/README.md). It provides an offline EN/DE COM add-in, in-place correction of selected prose or the compose body, a configurable shortcut and a per-user `.exe` installer. It needs no web manifest, Exchange deployment or hosted assets. See the native guide for installation, build instructions and the required Windows/Office acceptance checks.
+
+Build with `npm run build:native -- --core /path/to/localcorrect-browser`. The output is `dist/LocalCorrect-Outlook-Setup.exe`. Linux cross-compilation and engine tests are available; actual Outlook 2019 x86/x64 acceptance remains required before publishing a tested Windows release.
+
+## Legacy web prototype
+
+The separate Office.js prototype below is output-only and targets Outlook on the web. Its ZIP/manifest is not the desktop installer. These web-only restrictions do not describe the native COM path.
 
 ## Supported scope and use
 
@@ -76,4 +82,4 @@ Production hosts must serve static assets without analytics/injected scripts, al
 
 Local synthetic tests cover zero writes even in the late-selection race, callbacks/timeouts, stale reads, clear/close, changed item, concurrency, structural HTML separators and real-core correction. `npm run validate` checks XML syntax, known structural invariants, output-only compiled code/CSP, dictionaries/legal/source and ZIP CRC/hash. It is **not official Office schema/service validation**. Separately, Microsoft's `office-addin-manifest` 3.0.1 validator accepted the generated public RC manifest. That service/schema check is not a live installation test: actual host sideload/CSP/clipboard behavior remains an owner acceptance gate. The validator may contact a service and was given only the public manifest, never private inputs. See [Microsoft manifest validation](https://learn.microsoft.com/en-us/office/dev/add-ins/testing/troubleshoot-manifest).
 
-Before public RC: rebuild with reviewed final core pin, rerun all tests, compare two ZIP hashes, verify full notices, then publish matching hosted assets/manifest. Before relying on real drafts: synthetic new-mail EN/DE, both modes, selected-name preservation, P/DIV/BR, protected content, explicit Copy/manual fallback, clipboard disclosure, item/close/reset and network checks on the owner's actual permitted mailbox. No live Outlook, Windows installer, marketplace deployment or real-mail safety certification is claimed.
+Before public RC: rebuild with reviewed final core pin, rerun all tests, compare two ZIP hashes, verify full notices, then publish matching hosted assets/manifest. Before relying on real drafts: synthetic new-mail EN/DE, both modes, selected-name preservation, P/DIV/BR, protected content, explicit Copy/manual fallback, clipboard disclosure, item/close/reset and network checks on the owner's actual permitted mailbox. No live Outlook installation, marketplace deployment or real-mail safety certification is claimed. The native executable candidate is documented separately above.
