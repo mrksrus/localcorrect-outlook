@@ -83,7 +83,7 @@ namespace LocalCorrect.Setup {
                 }
             }
             using (var key = Registry.CurrentUser.CreateSubKey(UninstallKey)) {
-                key.SetValue("LocalCorrectOwner", Owner); key.SetValue("DisplayName", "LocalCorrect for classic Outlook"); key.SetValue("DisplayVersion", "1.0.0-rc.3"); key.SetValue("Publisher", "LocalCorrect contributors"); key.SetValue("InstallLocation", Root); key.SetValue("UninstallString", "\"" + SetupPath + "\" /uninstall"); key.SetValue("NoModify", 1); key.SetValue("NoRepair", 1);
+                key.SetValue("LocalCorrectOwner", Owner); key.SetValue("DisplayName", "LocalCorrect for classic Outlook"); key.SetValue("DisplayVersion", "1.0.0-rc.4"); key.SetValue("Publisher", "LocalCorrect contributors"); key.SetValue("InstallLocation", Root); key.SetValue("UninstallString", "\"" + SetupPath + "\" /uninstall"); key.SetValue("NoModify", 1); key.SetValue("NoRepair", 1);
             }
         }
         static void RemoveOwnedRegistrations() {

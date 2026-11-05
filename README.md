@@ -5,7 +5,9 @@ Press an editable shortcut to correct selected prose or the compose body.
 Corrections happen in place, preserve surrounding formatting and form one Word
 Undo operation. A ribbon button and settings dialog are included.
 
-[Download the experimental native EXE installer](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v1.0.0-rc.3).
+Current source candidate: native `1.0.0-rc.4`.
+[Download the experimental native RC4 installer](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v1.0.0-rc.4).
+[Download the fixed native RC3 baseline installer](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v1.0.0-rc.3).
 This is a per-user COM add-in. No Exchange/account manifest, hosted service,
 cloud correction or Office.js deployment is required.
 
@@ -34,9 +36,12 @@ precision-first policy. Real-word/grammar mistakes and unfamiliar names remain
 difficult. Review important messages before sending.
 
 The exact shared source pin is in [core-source.json](core-source.json).
-[Browser engine, public data and full measurements](https://github.com/mrksrus/localcorrect-browser)
-include 5,000 synthetic documents, 100 separately authored blind documents,
-wanted/wrong/missed edit counts, provenance and reproducible comparisons.
+[Pinned browser engine quality report](https://github.com/mrksrus/localcorrect-browser/blob/57ed9d3c4e1b087c4f27fdd9eeb8fc41db17c32d/QUALITY.md)
+publishes the pinned candidate's synthetic corpora, including all RC5 audits,
+wanted/wrong/missed edit counts, provenance and reproducible comparisons. Native
+RC4 inherits this shared policy. Its JavaScript/Jint parity checks compare runtime
+outputs and edit spans; correction quality comes from the shared-core evaluation.
+Browser RC4 and native RC3 remain fixed comparison releases.
 Windows CI tests .NET 10 and .NET Framework 4.8, AppDomain runtime parity and
 installer filesystem behavior. **Actual Outlook 2019 x86/x64 loading, formatting,
 shortcut, Undo and uninstall acceptance remains unverified.**
@@ -48,7 +53,8 @@ The shared engine began with Wolf Garbe's
 It is an original JavaScript implementation and offline compiler, not a direct
 GitHub fork or a neural model. AI-assisted iteration adjusted rules, static data
 and performance, without neural training. Bundled data include FrequencyWords,
-English/German spelling inventories, codespell and isolated Litkey error pairs.
+English/German spelling inventories, codespell, isolated Litkey error pairs,
+CSpell protective vocabulary and Homebrew formula names.
 [THIRD_PARTY.md](THIRD_PARTY.md) records licenses and attribution.
 No private chats or correspondence are published.
 

@@ -18,25 +18,26 @@ void Check(string input, string language, string expected) {
     if (result.text != expected) throw new Exception($"Unexpected result for synthetic {language} fixture: {result.text}");
     Console.WriteLine($"PASS {language}: {result.edits.Length} edits in {watch.Elapsed.TotalSeconds:F1}s");
 }
-Check("please teh mesage", "en", "please the message");
+Check("please teh documetn", "en", "please the document");
+Check("please keep the mesage", "en", "please keep the mesage");
 Check("Bitte senden Sie die Rehcnung.", "de", "Bitte senden Sie die Rechnung.");
-Check("https://example.com/recieve a@mesage.com `recieve`\n-- \nrecieve", "en", "https://example.com/recieve a@mesage.com `recieve`\n-- \nrecieve");
-Check("📧 please mesage this", "en", "📧 please message this");
+Check("https://example.com/seperate a@documetn.com `seperate`\n-- \nseperate", "en", "https://example.com/seperate a@documetn.com `seperate`\n-- \nseperate");
+Check("📧 please documetn this", "en", "📧 please document this");
 bool rejected = false;
 try { Corrector.Validate("abc", new Result { edits = new[] { new Edit { offset = 2, length = 4, original = "x", replacement = "y" } } }); } catch (InvalidOperationException) { rejected = true; }
 if (!rejected) throw new Exception("Out-of-bounds edit was accepted");
 Console.WriteLine("PASS edit validation");
 
-var quoted = engine.Correct("mesage", "en", "conservative", "From: someone\nmesage", 14);
+var quoted = engine.Correct("documetn", "en", "conservative", "From: someone\ndocumetn", 14);
 if (quoted.edits.Length != 0) throw new Exception("Selection lost quote context");
 Console.WriteLine("PASS selected text preserves full-document quote protection");
 foreach (var sample in new[] {
     new { Selection = "pleaes", Context = "pleaesant", Offset = 0 },
     new { Selection = "pleaes", Context = "xpleaes", Offset = 1 },
-    new { Selection = "mesage", Context = "mesage\u0301", Offset = 0 },
-    new { Selection = "mesage", Context = "mesage_", Offset = 0 },
-    new { Selection = "mesage", Context = "1mesage", Offset = 1 },
-    new { Selection = "mesage", Context = "\U00010400mesage", Offset = 2 },
+    new { Selection = "documetn", Context = "documetn\u0301", Offset = 0 },
+    new { Selection = "documetn", Context = "documetn_", Offset = 0 },
+    new { Selection = "documetn", Context = "1documetn", Offset = 1 },
+    new { Selection = "documetn", Context = "\U00010400documetn", Offset = 2 },
     new { Selection = "\ud83d", Context = "\ud83d\ude00", Offset = 0 },
 }) {
     bool boundaryRejected = false;
@@ -44,10 +45,10 @@ foreach (var sample in new[] {
     catch (ArgumentException) { boundaryRejected = true; }
     if (!boundaryRejected) throw new Exception("Partial-token selection was accepted");
 }
-if (engine.Correct("mesage", "en", "conservative", "a mesage.", 2).text != "message") throw new Exception("Whole-token selection rejected");
+if (engine.Correct("documetn", "en", "conservative", "a documetn.", 2).text != "document") throw new Exception("Whole-token selection rejected");
 Console.WriteLine("PASS token and surrogate selection boundaries");
 
-Check("please teh document.\r-- \rrecieve seperate", "en", "please the document.\r-- \rrecieve seperate");
+Check("please teh document.\r-- \rseperate seperate", "en", "please the document.\r-- \rseperate seperate");
 
 Console.WriteLine($"Peak working set: {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MiB; managed memory: {GC.GetTotalMemory(false) / 1024 / 1024} MiB; elapsed: {watch.Elapsed.TotalSeconds:F1}s");
 

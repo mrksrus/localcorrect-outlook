@@ -1,5 +1,5 @@
 {
   "repository": "mrksrus/localcorrect-browser",
-  "ref": "69a0b4b2bb68dc5d0398c755336078c6b28adc9f",
-  "releaseGate": "Frozen precision-first RC4 source and unchanged 5,000-document corpus plus 100-document blind audit. Observed zero unwanted edits is synthetic evidence, not a real-world guarantee. Promote the exact passing Windows CI artifact unchanged. Actual Outlook 2019 x86/x64 acceptance remains unverified; unsigned experimental candidate."
+  "ref": "57ed9d3c4e1b087c4f27fdd9eeb8fc41db17c32d",
+  "releaseGate": "Browser RC5 final frozen core: zero observed unwanted edits on 5,600 synthetic documents in both modes; the original 5,500 are known regressions and the final 100 were first evaluated after the last freeze. The fresh audit has 35 wanted edits, zero unwanted edits and 30 misses, without coverage superiority over fixed RC4. Promote only the exact passing Windows CI artifact unchanged. Actual Outlook 2019 x86/x64 device acceptance remains unverified; unsigned experimental candidate."
 }

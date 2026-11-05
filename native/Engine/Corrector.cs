@@ -30,11 +30,29 @@ namespace LocalCorrect {
             using (var r = new StreamReader(s ?? throw new InvalidOperationException("Missing bundled dictionary"))) return r.ReadToEnd();
         }
         public Corrector() {
-            engine = new Engine(o => o.LimitMemory(768L * 1024 * 1024).TimeoutInterval(TimeSpan.FromSeconds(90)).MaxStatements(100_000_000));
-            engine.Execute(Resource("core.js"));
-            engine.SetValue("enSource", Resource("en.txt"));
-            engine.SetValue("deSource", Resource("de.txt"));
-            engine.Execute("var corrector = LocalCorrectCore.createCorrector({en:enSource,de:deSource}); enSource=null; deSource=null; LocalCorrectCore.prepare();");
+            var stage = "loading bundled data";
+            try {
+                engine = new Engine(o => o.LimitMemory(768L * 1024 * 1024).TimeoutInterval(TimeSpan.FromSeconds(90)).MaxStatements(100_000_000));
+                engine.Execute(Resource("core.js"));
+                engine.SetValue("enSource", Resource("en.txt"));
+                engine.SetValue("deSource", Resource("de.txt"));
+                stage = "preparing word-frequency tables";
+                engine.Execute("var corrector = LocalCorrectCore.createCorrector({en:enSource,de:deSource}); enSource=null; deSource=null;");
+                // Independent static stages keep transient startup allocations
+                // within the same per-entry limits used for every correction.
+                // Empty text prepares EN/DE validity without reading any email.
+                stage = "preparing spelling validity";
+                engine.Execute("corrector.correct('',{language:'en',mode:'conservative'});");
+                stage = "preparing lookup indexes";
+                engine.Execute("LocalCorrectCore.prepare();");
+            } catch (Exception error) {
+                try { engine?.Dispose(); } catch { }
+                var detail = error.Message ?? error.GetType().Name;
+                if (detail.Length > 512) detail = detail.Substring(0, 512);
+                // Jint resource exceptions are not serializable across the
+                // .NET Framework AppDomain. Do not retain one as InnerException.
+                throw new InvalidOperationException("Offline correction startup failed while " + stage + ". " + detail);
+            }
         }
         public Result Correct(string text, string language, string mode, string context = null, int contextOffset = 0) {
             if (text == null || text.Length > 20000) throw new ArgumentException("Select at most 20,000 characters.");
