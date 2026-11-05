@@ -1,5 +1,5 @@
 {
   "repository": "mrksrus/localcorrect-browser",
-  "ref": "76e283672efc0ad5afa09e3abea5d354c2fb595e",
-  "releaseGate": "Shared RC2 core, synthetic regression and browser checks passed; independent candidate review recorded separately. Native Windows engine/build CI and actual Office2019 acceptance are distinct checks."
+  "ref": "ea0a6db42b6493a137eaa311ae0413027fae3761",
+  "releaseGate": "Reviewed RC3 shared core and frozen primary200 corpus. Primary results include post-validation tuning; separate40-case blind audit retains failures. Experimental unsigned candidate; exact Windows runtime checks and actual Outlook device acceptance are distinct."
 }

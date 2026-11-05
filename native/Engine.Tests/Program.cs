@@ -30,6 +30,8 @@ Console.WriteLine("PASS edit validation");
 var quoted = engine.Correct("mesage", "en", "conservative", "From: someone\nmesage", 14);
 if (quoted.edits.Length != 0) throw new Exception("Selection lost quote context");
 Console.WriteLine("PASS selected text preserves full-document quote protection");
+Check("please teh document.\r-- \rrecieve seperate", "en", "please the document.\r-- \rrecieve seperate");
+
 Console.WriteLine($"Peak working set: {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MiB; managed memory: {GC.GetTotalMemory(false) / 1024 / 1024} MiB; elapsed: {watch.Elapsed.TotalSeconds:F1}s");
 
 using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("parity.json"))

@@ -27,7 +27,7 @@ node scripts/build-native.mjs --core /path/to/localcorrect-browser --dotnet /pat
 
 Output: `dist/LocalCorrect-Outlook-Setup.exe`, a managed Windows PE executable with an embedded ZIP payload. It is not a ZIP renamed to `.exe`. The same AnyCPU add-in supports both Outlook bitnesses. The installer writes the required COM registration in both registry views on 64-bit Windows.
 
-Use `--release --locked` only with a clean core checkout matching `core-source.json`. The core hash and source are included in the payload. `--skip-tests` is for incremental compile checks, never a release gate. The installer carries native/core source, dictionaries and license notices plus the exact runtime NuGet packages. Jint runs without CLR interop. Dependency package metadata records license expressions and source repositories.
+Use `--release --locked` only with a clean core checkout matching `core-source.json`. The core hash, frozen email-corpus hashes and corresponding source are included in the payload. The exact 200 email/document fixtures also ship with the source so the parity build can be reproduced. `--skip-tests` is for incremental compile checks, never a release gate. The installer carries native/core source, dictionaries and license notices plus the exact runtime NuGet packages. Jint runs without CLR interop. Dependency package metadata records license expressions and source repositories.
 
 ## Required Windows acceptance before publication
 
@@ -41,6 +41,6 @@ Linux compilation and engine tests do not prove Office COM loading. This candida
 - Change the shortcut, test a collision, switch away from Outlook and verify the shortcut is released. Use the ribbon when a shortcut is reserved.
 - Test install refusal with Outlook open, an existing/conflicting install and restrictive Office policy. Uninstall with unrelated/modified files present and verify they remain.
 
-Do not publish as a tested Windows release until these checks pass. The SDK build and portable engine tests are recorded separately. On Windows, the build also executes the engine/parity tests under .NET Framework 4.8 in an isolated AppDomain. On Linux it compiles the net48 add-in and executes the portable net10 engine tests. This still does not exercise Office COM integration.
+Do not publish as a tested Windows release until these checks pass. The SDK build and portable engine tests are recorded separately. The build compares 200 full-document cases in both correction modes against the JavaScript engine, in addition to the original smoke cases. This is runtime parity; gold correction accuracy is reported separately. On Windows, the build also executes the engine/parity tests under .NET Framework 4.8 in an isolated AppDomain. On Linux it compiles the net48 add-in and executes the portable net10 engine tests. This still does not exercise Office COM integration.
 
-A Linux x64 run of both language indexes plus 22 JavaScript/Jint parity cases took about 14 seconds cold and peaked at 354 MiB process memory. Later short corrections reuse the indexes. Real 32-bit Outlook memory headroom remains an acceptance concern.
+A Linux x64 .NET10 development run of both language indexes plus 422 JavaScript/Jint parity cases took 85.2 seconds in total and peaked at 539 MiB process memory. This is an entire synthetic suite, not latency for one email. Later corrections reuse the indexes. Exact final Windows results are linked with the candidate artifacts. Real 32-bit Outlook memory headroom remains an acceptance concern.

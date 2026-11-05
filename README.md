@@ -1,4 +1,4 @@
-# LocalCorrect Outlook 1.0.0-rc.1
+# LocalCorrect Outlook 1.0.0-rc.2 native candidate
 
 The native Windows candidate for **classic Outlook 2019** is in [`native/`](native/README.md). It provides an offline EN/DE COM add-in, in-place correction of selected prose or the compose body, a configurable shortcut and a per-user `.exe` installer. It needs no web manifest, Exchange deployment or hosted assets. See the native guide for installation, build instructions and the required Windows/Office acceptance checks.
 
