@@ -1,5 +1,5 @@
 {
   "repository": "mrksrus/localcorrect-browser",
-  "ref": "ea0a6db42b6493a137eaa311ae0413027fae3761",
-  "releaseGate": "Reviewed RC3 shared core and frozen primary200 corpus. Primary results include post-validation tuning; separate40-case blind audit retains failures. Experimental unsigned candidate; exact Windows runtime checks and actual Outlook device acceptance are distinct."
+  "ref": "69a0b4b2bb68dc5d0398c755336078c6b28adc9f",
+  "releaseGate": "Frozen precision-first RC4 source and unchanged 5,000-document corpus plus 100-document blind audit. Observed zero unwanted edits is synthetic evidence, not a real-world guarantee. Promote the exact passing Windows CI artifact unchanged. Actual Outlook 2019 x86/x64 acceptance remains unverified; unsigned experimental candidate."
 }

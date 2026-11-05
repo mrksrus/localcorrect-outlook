@@ -30,6 +30,23 @@ Console.WriteLine("PASS edit validation");
 var quoted = engine.Correct("mesage", "en", "conservative", "From: someone\nmesage", 14);
 if (quoted.edits.Length != 0) throw new Exception("Selection lost quote context");
 Console.WriteLine("PASS selected text preserves full-document quote protection");
+foreach (var sample in new[] {
+    new { Selection = "pleaes", Context = "pleaesant", Offset = 0 },
+    new { Selection = "pleaes", Context = "xpleaes", Offset = 1 },
+    new { Selection = "mesage", Context = "mesage\u0301", Offset = 0 },
+    new { Selection = "mesage", Context = "mesage_", Offset = 0 },
+    new { Selection = "mesage", Context = "1mesage", Offset = 1 },
+    new { Selection = "mesage", Context = "\U00010400mesage", Offset = 2 },
+    new { Selection = "\ud83d", Context = "\ud83d\ude00", Offset = 0 },
+}) {
+    bool boundaryRejected = false;
+    try { engine.Correct(sample.Selection, "en", "conservative", sample.Context, sample.Offset); }
+    catch (ArgumentException) { boundaryRejected = true; }
+    if (!boundaryRejected) throw new Exception("Partial-token selection was accepted");
+}
+if (engine.Correct("mesage", "en", "conservative", "a mesage.", 2).text != "message") throw new Exception("Whole-token selection rejected");
+Console.WriteLine("PASS token and surrogate selection boundaries");
+
 Check("please teh document.\r-- \rrecieve seperate", "en", "please the document.\r-- \rrecieve seperate");
 
 Console.WriteLine($"Peak working set: {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MiB; managed memory: {GC.GetTotalMemory(false) / 1024 / 1024} MiB; elapsed: {watch.Elapsed.TotalSeconds:F1}s");
@@ -45,6 +62,15 @@ using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("p
         count++;
     }
     Console.WriteLine($"PASS {count} Jint/JavaScript parity cases");
+    foreach (var language in new[] { "en", "de" }) {
+        Fixture longFixture = null;
+        foreach (var f in fixtures) if (f.language == language && f.text.Length >= 4500 && f.text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).Length >= 900) { longFixture = f; break; }
+        if (longFixture == null) throw new Exception("Missing long-email performance fixture");
+        var samples = new double[3];
+        for (int i = 0; i < samples.Length; i++) { var latency = Stopwatch.StartNew(); engine.Correct(longFixture.text, language, "conservative"); samples[i] = latency.Elapsed.TotalMilliseconds; }
+        Console.WriteLine($"Warm ~1000-word {language} engine timings, ms: {string.Join(", ", Array.ConvertAll(samples, value => value.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)))}");
+    }
+
 }
 Console.WriteLine($"Final peak working set: {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MiB; managed memory: {GC.GetTotalMemory(false) / 1024 / 1024} MiB; elapsed: {watch.Elapsed.TotalSeconds:F1}s");
 

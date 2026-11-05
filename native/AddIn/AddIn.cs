@@ -15,14 +15,22 @@ namespace LocalCorrect.Outlook {
         Timer timer;
         Corrector corrector;
         AppDomain engineDomain;
-        bool busy, disconnected;
+        readonly object engineGate = new object();
+        bool busy;
+        volatile bool disconnected;
         public void OnConnection(object app, int connectMode, object addInInst, ref Array custom) {
             application = app; settings = Settings.Load(); disconnected = false;
             window = new HotkeyWindow(() => Correct(true));
             timer = new Timer { Interval = 250 };
             timer.Tick += (s, e) => UpdateHotkey(); timer.Start();
+            // Initialize static dictionaries off the Office UI thread. No email
+            // is inspected. A first action waits for this same serialized worker.
+            Task.Run(() => { lock (engineGate) { if (!disconnected) { try { EnsureEngine(); } catch { ResetEngine(); } } } });
         }
-        public void OnDisconnection(int removeMode, ref Array custom) { disconnected = true; timer?.Stop(); timer?.Dispose(); window?.Dispose(); application = null; var domain = engineDomain; engineDomain = null; if (domain != null) Task.Run(() => { try { AppDomain.Unload(domain); } catch { } }); }
+        public void OnDisconnection(int removeMode, ref Array custom) {
+            disconnected = true; timer?.Stop(); timer?.Dispose(); window?.Dispose(); application = null;
+            Task.Run(() => { lock (engineGate) { ResetEngine(); } });
+        }
         public void OnBeginShutdown(ref Array custom) { OnDisconnection(0, ref custom); }
         public void OnAddInsUpdate(ref Array custom) { }
         public void OnStartupComplete(ref Array custom) { }
@@ -100,25 +108,32 @@ namespace LocalCorrect.Outlook {
             } catch (Exception ex) { if (!disconnected) Info("Correction stopped. " + SafeError(ex)); }
             finally { busy = false; if (!disconnected) UpdateHotkey(); }
         }
+        void EnsureEngine() {
+            if (corrector != null) return;
+            var folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            var setup = new AppDomainSetup { ApplicationBase = folder, ConfigurationFile = Path.Combine(folder, "LocalCorrect.Outlook.dll.config") };
+            engineDomain = AppDomain.CreateDomain("LocalCorrect offline engine", null, setup);
+            corrector = (Corrector)engineDomain.CreateInstanceAndUnwrap(typeof(Corrector).Assembly.FullName, typeof(Corrector).FullName);
+        }
+        void ResetEngine() {
+            corrector = null; var domain = engineDomain; engineDomain = null;
+            if (domain != null) { try { AppDomain.Unload(domain); } catch { } }
+        }
         Task<Result> RunEngine(string source, string language, string mode, string context, int offset) {
-            var completion = new TaskCompletionSource<Result>();
-            Task.Run(() => {
-                try {
-                    if (corrector == null) {
-                        var folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-                        var setup = new AppDomainSetup { ApplicationBase = folder, ConfigurationFile = Path.Combine(folder, "LocalCorrect.Outlook.dll.config") };
-                        engineDomain = AppDomain.CreateDomain("LocalCorrect offline engine", null, setup);
-                        corrector = (Corrector)engineDomain.CreateInstanceAndUnwrap(typeof(Corrector).Assembly.FullName, typeof(Corrector).FullName);
-                    }
-                    if (disconnected) throw new OperationCanceledException();
-                    var result = corrector.Correct(Normalized(source), language, mode, Normalized(context), offset);
-                    window.Post(() => completion.SetResult(result));
-                } catch (Exception ex) { corrector = null; var failedDomain = engineDomain; engineDomain = null; if (failedDomain != null) { try { AppDomain.Unload(failedDomain); } catch { } } window.Post(() => completion.SetException(ex)); }
-            });
-            // An explicit WinForms context ensures the continuation uses the Office UI thread.
+            // WinForms context keeps the caller's continuation on the Office UI
+            // thread. Only immutable strings enter the serialized engine worker.
             if (System.Threading.SynchronizationContext.Current == null)
                 System.Threading.SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
-            return completion.Task;
+            return Task.Run(() => {
+                lock (engineGate) {
+                    try {
+                        if (disconnected) throw new OperationCanceledException();
+                        EnsureEngine();
+                        if (disconnected) throw new OperationCanceledException();
+                        return corrector.Correct(Normalized(source), language, mode, Normalized(context), offset);
+                    } catch { ResetEngine(); throw; }
+                }
+            });
         }
         static bool SameComObject(object a, object b) {
             IntPtr x = IntPtr.Zero, y = IntPtr.Zero;

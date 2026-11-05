@@ -34,13 +34,15 @@ namespace LocalCorrect {
             engine.Execute(Resource("core.js"));
             engine.SetValue("enSource", Resource("en.txt"));
             engine.SetValue("deSource", Resource("de.txt"));
-            engine.Execute("var corrector = LocalCorrectCore.createCorrector({en:enSource,de:deSource}); enSource=null; deSource=null;");
+            engine.Execute("var corrector = LocalCorrectCore.createCorrector({en:enSource,de:deSource}); enSource=null; deSource=null; LocalCorrectCore.prepare();");
         }
         public Result Correct(string text, string language, string mode, string context = null, int contextOffset = 0) {
             if (text == null || text.Length > 20000) throw new ArgumentException("Select at most 20,000 characters.");
             if (language != "en" && language != "de") throw new ArgumentException("Choose English or German.");
             if (mode != "conservative" && mode != "balanced") throw new ArgumentException("Invalid correction mode.");
             if (context != null && (context.Length > 1_000_000 || contextOffset < 0 || contextOffset > context.Length - text.Length || context.Substring(contextOffset, text.Length) != text)) throw new ArgumentException("The selected text does not match its document context.");
+            if (context != null && (InsideToken(context, contextOffset) || InsideToken(context, contextOffset + text.Length)))
+                throw new ArgumentException("Selection cuts through a word. Select complete words; no changes made.");
             engine.SetValue("inputText", text);
             engine.SetValue("documentText", context ?? text);
             engine.SetValue("contextOffset", context == null ? 0 : contextOffset);
@@ -57,6 +59,19 @@ namespace LocalCorrect {
                 Validate(text, result);
                 return result;
             } finally { engine.SetValue("inputText", ""); engine.SetValue("documentText", ""); }
+        }
+        static bool InsideToken(string text, int position) {
+            if (position <= 0 || position >= text.Length) return false;
+            if (char.IsHighSurrogate(text[position - 1]) && char.IsLowSurrogate(text[position])) return true;
+            return TokenCharacter(text, position - (char.IsLowSurrogate(text[position - 1]) && position >= 2 && char.IsHighSurrogate(text[position - 2]) ? 2 : 1)) && TokenCharacter(text, position);
+        }
+        static bool TokenCharacter(string text, int position) {
+            if (text[position] == '_') return true;
+            var category = CharUnicodeInfo.GetUnicodeCategory(text, position);
+            return category == UnicodeCategory.UppercaseLetter || category == UnicodeCategory.LowercaseLetter ||
+                category == UnicodeCategory.TitlecaseLetter || category == UnicodeCategory.ModifierLetter || category == UnicodeCategory.OtherLetter ||
+                category == UnicodeCategory.NonSpacingMark || category == UnicodeCategory.SpacingCombiningMark || category == UnicodeCategory.EnclosingMark ||
+                category == UnicodeCategory.DecimalDigitNumber || category == UnicodeCategory.LetterNumber || category == UnicodeCategory.OtherNumber;
         }
         public static void Validate(string source, Result result) {
             if (result?.edits == null) throw new InvalidOperationException("Invalid correction result.");
