@@ -5,7 +5,8 @@ Press an editable shortcut to correct selected prose or the compose body.
 Corrections happen in place, preserve surrounding formatting and form one Word
 Undo operation. A ribbon button and settings dialog are included.
 
-[Download the experimental native EXE installer](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v1.0.0-rc.3).
+Current source candidate: native `1.0.0-rc.4`.
+[Download the fixed native RC3 baseline installer](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v1.0.0-rc.3).
 This is a per-user COM add-in. No Exchange/account manifest, hosted service,
 cloud correction or Office.js deployment is required.
 
@@ -35,8 +36,11 @@ difficult. Review important messages before sending.
 
 The exact shared source pin is in [core-source.json](core-source.json).
 [Browser engine, public data and full measurements](https://github.com/mrksrus/localcorrect-browser)
-include 5,000 synthetic documents, 100 separately authored blind documents,
-wanted/wrong/missed edit counts, provenance and reproducible comparisons.
+publish the pinned candidate's synthetic corpora, including the RC5 blind set,
+wanted/wrong/missed edit counts, provenance and reproducible comparisons. Native
+RC4 inherits this shared policy. Its JavaScript/Jint parity checks compare runtime
+outputs and edit spans; correction quality comes from the shared-core evaluation.
+Browser RC4 and native RC3 remain fixed comparison releases.
 Windows CI tests .NET 10 and .NET Framework 4.8, AppDomain runtime parity and
 installer filesystem behavior. **Actual Outlook 2019 x86/x64 loading, formatting,
 shortcut, Undo and uninstall acceptance remains unverified.**

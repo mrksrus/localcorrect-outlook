@@ -18,7 +18,8 @@ and English Wikipedia attribution. Isolated Litkey spelling pairs retain CC BY-S
 4.0 and the original corpus author citation. Raw pupil stories are not bundled.
 
 The complete transformations, source URLs, authors, license texts and checksums
-are preserved in source/browser/THIRD_PARTY.md, typo-sources.json and
+are preserved in source/browser/THIRD_PARTY.md, typo-sources.json,
+candidate-sources.json, protect-sources.json, ambiguity-sources.json and
 source/browser/packages/core/vendor/typo-data. Source/browser/tests/scale-corpus
 contains the separate synthetic-data notices and gold. These paths describe the
 installed payload. The companion browser repository provides the same records.
