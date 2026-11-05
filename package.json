@@ -1,16 +1,22 @@
 {
   "name": "localcorrect-outlook",
-  "version": "1.0.0-rc.1",
+  "version": "1.0.0-rc.3",
   "private": true,
   "type": "module",
-  "description": "Local selected-text correction for Outlook on the web",
+  "description": "Offline English/German correction for classic Outlook desktop, with a legacy web prototype",
   "license": "GPL-3.0-only",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "test": "node --test test/*.test.js",
     "build": "node scripts/build.mjs",
     "test:integration": "node --test test/integration.test.js",
-    "validate": "node scripts/validate.mjs"
+    "validate": "node scripts/validate.mjs",
+    "build:native": "node scripts/build-native.mjs"
   },
-  "devDependencies": { "esbuild": "0.25.12", "linkedom": "0.18.12" }
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "linkedom": "0.18.12"
+  }
 }

@@ -1,0 +1,45 @@
+name: Native Outlook candidate
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  native:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: npm ci --ignore-scripts
+      - name: Read reviewed core pin
+        id: core
+        shell: bash
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("core-source.json")); if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(p.repository)||!/^[a-f0-9]{40}$/.test(p.ref)) throw new Error("Pin reviewed core first"); fs.appendFileSync(process.env.GITHUB_OUTPUT,`repository=${p.repository}\nref=${p.ref}\n`);'
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.core.outputs.repository }}
+          ref: ${{ steps.core.outputs.ref }}
+          path: .core-checkout
+          persist-credentials: false
+      - run: npm run build:native -- --core .core-checkout --release --locked
+      - name: Verify Windows executable
+        shell: pwsh
+        run: |
+          $bytes = [IO.File]::ReadAllBytes("dist/LocalCorrect-Outlook-Setup.exe")
+          if ($bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw "Not a PE executable" }
+          [Reflection.AssemblyName]::GetAssemblyName((Resolve-Path "dist/LocalCorrect-Outlook-Setup.exe"))
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-outlook-candidate
+          path: |
+            dist/LocalCorrect-Outlook-Setup.exe
+            dist/LocalCorrect-Outlook-Setup.exe.sha256
+# Build and engine tests only. A hosted runner without Outlook is not COM/Office acceptance.

@@ -1,0 +1,17 @@
+[
+  {
+    "file": "Jint-LICENSE.txt",
+    "url": "https://raw.githubusercontent.com/sebastienros/jint/f0e4cbb55467b6e168c9da6392e402e8b3e65c2f/LICENSE.txt",
+    "sha256": "7fd0f56c1bc3ac00b50e44fc9b93eeeaeb6905b62a272eb310590b68d4a5c3ff"
+  },
+  {
+    "file": "Acornima-LICENSE.txt",
+    "url": "https://raw.githubusercontent.com/adams85/acornima/401bd62d8aeb9f7cbe7b6147937a87e0c71747a8/LICENSE",
+    "sha256": "4182d3e7ce42f69b01f35c6ed27d075d26794a3c2f0b0182aa475be6ca565bab"
+  },
+  {
+    "file": "Acornima-NOTICE.txt",
+    "url": "https://raw.githubusercontent.com/adams85/acornima/401bd62d8aeb9f7cbe7b6147937a87e0c71747a8/NOTICE",
+    "sha256": "db29de38017903463b447c47803c02db2f3375af57f9eff455556926187c7bb8"
+  }
+]

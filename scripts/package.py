@@ -7,7 +7,9 @@ out = root / 'dist' / 'localcorrect-outlook-1.0.0-rc.1.zip'
 entries = [(p, p.relative_to(root / 'build').as_posix()) for p in (root / 'build').rglob('*') if p.is_file()]
 for p in root.rglob('*'):
     rel = p.relative_to(root)
-    if any(x in {'.git', '.core-checkout', '__pycache__', 'node_modules', 'build', 'dist'} for x in rel.parts) or not p.is_file():
+    if any(x in {'.git', '.core-checkout', '__pycache__', 'node_modules', 'build', 'dist', 'work', 'test-results', 'bin', 'obj'} for x in rel.parts) or not p.is_file():
+        continue
+    if rel.parts[:2] == ('native', 'assets') and p.name != '.gitkeep':
         continue
     entries.append((p, 'outlook-source/' + rel.as_posix()))
 with zipfile.ZipFile(out, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=9) as z:
