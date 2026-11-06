@@ -75,9 +75,10 @@ namespace LocalCorrect.Outlook {
                 if (source.Length != end - start) throw new InvalidOperationException("This editor's character mapping is unsupported. Select a smaller plain-text passage.");
                 string documentBefore = (string)doc.Content.Text;
                 string language = settings.Language, mode = settings.Mode;
+                bool mixedLanguage = settings.MixedLanguage;
                 busy = true; window.Unregister();
                 // No Office COM object crosses to the worker. All editor operations stay on the Office UI thread.
-                var result = await RunEngine(source, language, mode, documentBefore, start - (int)doc.Content.Start);
+                var result = await RunEngine(source, language, mode, documentBefore, start - (int)doc.Content.Start, mixedLanguage);
                 if (disconnected) return;
                 dynamic currentInspector, currentDoc; IntPtr currentHwnd;
                 if (!TryTarget(out currentInspector, out currentDoc, out currentHwnd) || currentHwnd != hwnd || (fromShortcut && !HotkeyWindow.IsEditorFocused(hwnd)) || !SameComObject(doc, currentDoc) || (string)doc.Content.Text != documentBefore || (int)doc.Application.Selection.Start != selectionStart || (int)doc.Application.Selection.End != selectionEnd)
@@ -120,9 +121,9 @@ namespace LocalCorrect.Outlook {
             corrector = null; var domain = engineDomain; engineDomain = null;
             if (domain != null) { try { AppDomain.Unload(domain); } catch { } }
         }
-        Task<Result> RunEngine(string source, string language, string mode, string context, int offset) {
+        Task<Result> RunEngine(string source, string language, string mode, string context, int offset, bool mixedLanguage) {
             // WinForms context keeps the caller's continuation on the Office UI
-            // thread. Only immutable strings enter the serialized engine worker.
+            // thread. Only immutable values enter the serialized engine worker.
             if (System.Threading.SynchronizationContext.Current == null)
                 System.Threading.SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
             return Task.Run(() => {
@@ -131,7 +132,7 @@ namespace LocalCorrect.Outlook {
                         if (disconnected) throw new OperationCanceledException();
                         EnsureEngine();
                         if (disconnected) throw new OperationCanceledException();
-                        return corrector.Correct(Normalized(source), language, mode, Normalized(context), offset);
+                        return corrector.Correct(Normalized(source), language, mode, Normalized(context), offset, mixedLanguage);
                     } catch { ResetEngine(); throw; }
                 }
             });

@@ -5,6 +5,36 @@ using System.IO;
 using System.Text;
 using System.Threading.Tasks;
 using LocalCorrect;
+using LocalCorrect.Outlook;
+
+void Require(bool condition, string description) { if (!condition) throw new Exception(description); }
+Request ReadRequest(string json) {
+    var bytes = Encoding.UTF8.GetBytes(json);
+    using (var stream = new MemoryStream()) { stream.Write(BitConverter.GetBytes(bytes.Length), 0, 4); stream.Write(bytes, 0, bytes.Length); stream.Position = 0; return Frames.Read<Request>(stream); }
+}
+if (args.Length == 0 || (args.Length == 1 && !args[0].StartsWith("--"))) {
+    foreach (var value in new object[] { null, 1, 2, -1, "0", "false", false, 0L, new byte[] { 0 } })
+        Require(MixedLanguageSetting.Read(value), "Missing or malformed saved language scope disabled bilingual protection");
+    foreach (var mixedLanguage in new[] { true, false })
+        Require(MixedLanguageSetting.Read(MixedLanguageSetting.Write(mixedLanguage)) == mixedLanguage, "Saved language scope did not roundtrip");
+    var legacy = ReadRequest("{\"version\":1,\"operation\":\"correct\",\"text\":\"synthetic\"}");
+    Require(legacy.mixedLanguage == null && (legacy.mixedLanguage ?? true), "Legacy request changed bilingual default");
+    foreach (var mixedLanguage in new[] { true, false }) {
+        using (var stream = new MemoryStream()) {
+            Frames.Write(stream, new Request { version = 1, operation = "correct", mixedLanguage = mixedLanguage }); stream.Position = 0;
+            Require(Frames.Read<Request>(stream).mixedLanguage == mixedLanguage, "Language scope did not roundtrip through frame");
+        }
+    }
+    foreach (var malformed in new[] { "\"false\"", "\"true\"", "0", "1", "null", "{}", "[]" }) {
+        bool rejected = false;
+        try { ReadRequest("{\"version\":1,\"operation\":\"correct\",\"mixedLanguage\":" + malformed + "}"); } catch { rejected = true; }
+        Require(rejected, "Malformed language scope accepted");
+    }
+    bool duplicateRejected = false;
+    try { ReadRequest("{\"version\":1,\"operation\":\"correct\",\"mixedLanguage\":true,\"mixedLanguage\":false}"); } catch { duplicateRejected = true; }
+    Require(duplicateRejected, "Duplicate language scope accepted");
+    Console.WriteLine("PASS saved language scope, legacy request default, boolean frames and malformed scope rejection");
+}
 
 if (args.Length == 1 && args[0] == "--prefix-probe") {
     var input = Console.OpenStandardInput(); var bytes = new byte[4];
@@ -12,7 +42,7 @@ if (args.Length == 1 && args[0] == "--prefix-probe") {
     Console.WriteLine("wire-prefix=" + BitConverter.ToString(bytes));
     return 0;
 }
-if (args.Length == 1 && args[0] == "--wire-child") {
+if (args.Length == 1 && (args[0] == "--wire-child" || args[0] == "--wire-child-selected-only")) {
     string stage = "ready-frame";
     try {
         var input = Console.OpenStandardInput(); var output = Console.OpenStandardOutput();
@@ -22,6 +52,7 @@ if (args.Length == 1 && args[0] == "--wire-child") {
         stage = "correction-frame";
         var request = Frames.Read<Request>(input);
         if (request.version != 1 || request.operation != "correct") return 2;
+        if ((request.mixedLanguage ?? true) != (args[0] != "--wire-child-selected-only")) return 2;
         Frames.Write(output, new Response { version = 1, status = "ok", result = new Result { text = request.text, edits = new Edit[0] } });
         return 0;
     } catch (Exception error) {
@@ -88,6 +119,9 @@ try {
     using (var helper = new HelperConnection(childPath, "--wire-child", readyTimeout:5000, correctionTimeout:3000)) {
         if (helper.Correct("synthetic 📧 Ä", "en", "conservative", null, 0).text != "synthetic 📧 Ä") throw new Exception("HelperConnection synthetic result mismatch");
     }
-    Console.WriteLine("PASS actual HelperConnection startup and correction");
+    using (var helper = new HelperConnection(childPath, "--wire-child-selected-only", readyTimeout:5000, correctionTimeout:3000)) {
+        if (helper.Correct("synthetic 📧 Ä", "en", "conservative", null, 0, false).text != "synthetic 📧 Ä") throw new Exception("HelperConnection selected-only scope did not propagate");
+    }
+    Console.WriteLine("PASS actual HelperConnection startup, correction and selected-only scope");
 } finally { Console.InputEncoding = originalEncoding; }
 return 0;

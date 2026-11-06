@@ -31,6 +31,10 @@ namespace LocalCorrect {
                 engine.Execute("corrector.correct('',{language:'en',mode:'conservative'});");
                 stage = "preparing lookup indexes";
                 engine.Execute("LocalCorrectCore.prepare();");
+                stage = "preparing selected English vocabulary";
+                engine.Execute("LocalCorrectCore.prepareSelectedVocabulary('en');");
+                stage = "preparing selected German vocabulary";
+                engine.Execute("LocalCorrectCore.prepareSelectedVocabulary('de');");
                 stage = "loading contextual model";
                 model = new ContextModel(engine);
             } catch (Exception) {
@@ -41,16 +45,17 @@ namespace LocalCorrect {
                 throw new InvalidOperationException("Offline correction startup failed while " + stage + ".");
             }
         }
-        public Result Correct(string text, string language, string mode, string context = null, int contextOffset = 0) {
+        public Result Correct(string text, string language, string mode, string context = null, int contextOffset = 0, bool mixedLanguage = true) {
             ValidateRequest(text, language, mode, context, contextOffset);
             engine.SetValue("inputText", text);
             engine.SetValue("documentText", context ?? text);
             engine.SetValue("contextOffset", context == null ? 0 : contextOffset);
             engine.SetValue("inputLanguage", language);
             engine.SetValue("inputMode", mode);
+            engine.SetValue("inputMixedLanguage", mixedLanguage);
             try {
                 engine.SetValue("contextScoresJson", model.Score(engine.Evaluate("JSON.stringify(LocalCorrectCore.encodeContext(inputText,inputLanguage,{policyOnly:true}).chunks)").AsString()));
-                var raw = engine.Evaluate("(function(){ var result=corrector.correct(inputText,{language:inputLanguage,mode:inputMode,contextScores:JSON.parse(contextScoresJson)}); var protectedSpans=LocalCorrectCore.protectedRanges(documentText); result.edits=result.edits.filter(function(e){return !protectedSpans.some(function(p){return e.offset+contextOffset < p[1] && e.offset+contextOffset+e.length > p[0];});}); var output=inputText; for(var i=result.edits.length-1;i>=0;i--){var e=result.edits[i];output=output.slice(0,e.offset)+e.replacement+output.slice(e.offset+e.length);} result.text=output; return result;})()").AsObject();
+                var raw = engine.Evaluate("(function(){ var result=corrector.correct(inputText,{language:inputLanguage,mode:inputMode,mixedLanguage:inputMixedLanguage,contextScores:JSON.parse(contextScoresJson)}); var protectedSpans=LocalCorrectCore.protectedRanges(documentText); result.edits=result.edits.filter(function(e){return !protectedSpans.some(function(p){return e.offset+contextOffset < p[1] && e.offset+contextOffset+e.length > p[0];});}); var output=inputText; for(var i=result.edits.length-1;i>=0;i--){var e=result.edits[i];output=output.slice(0,e.offset)+e.replacement+output.slice(e.offset+e.length);} result.text=output; return result;})()").AsObject();
                 var edits = raw.Get("edits").AsArray();
                 var result = new Result { text = raw.Get("text").AsString(), skipped = checked((int)raw.Get("skipped").AsNumber()), edits = new Edit[checked((int)edits.Length)] };
                 for (int i = 0; i < result.edits.Length; i++) {

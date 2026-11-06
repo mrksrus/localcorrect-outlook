@@ -39,11 +39,11 @@ namespace LocalCorrect {
             if (response.version != 1 || (response.status != "ready" && response.status != "ok" && response.status != "rejected")) throw new InvalidDataException();
             return response;
         }
-        internal Result Correct(string text, string language, string mode, string context, int contextOffset) {
+        internal Result Correct(string text, string language, string mode, string context, int contextOffset, bool mixedLanguage = true) {
             if (disposed) throw new ObjectDisposedException("HelperConnection");
             try {
                 if (helper == null || helper.HasExited) { Stop(); Start(); }
-                var response = Exchange(new Request { version = 1, operation = "correct", text = text, language = language, mode = mode, context = context, contextOffset = contextOffset }, correctionTimeout);
+                var response = Exchange(new Request { version = 1, operation = "correct", text = text, language = language, mode = mode, context = context, contextOffset = contextOffset, mixedLanguage = mixedLanguage }, correctionTimeout);
                 if (response.status != "ok" || response.result == null) throw new InvalidDataException();
                 Corrector.Validate(text, response.result); return response.result;
             } catch { Stop(); throw new InvalidOperationException("Offline correction could not complete. No changes made. Run correction again."); }

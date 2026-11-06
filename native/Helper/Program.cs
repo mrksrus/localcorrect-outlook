@@ -23,7 +23,7 @@ try {
         }
         if (request.operation != "correct") return 2;
         try {
-            var result = corrector.Correct(request.text, request.language, request.mode, request.context, request.contextOffset);
+            var result = corrector.Correct(request.text, request.language, request.mode, request.context, request.contextOffset, request.mixedLanguage ?? true);
             Frames.Write(output, new Response { version = 1, status = "ok", result = result });
         } catch (ArgumentException) { Frames.Write(output, new Response { version = 1, status = "rejected" }); }
     }

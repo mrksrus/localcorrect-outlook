@@ -21,13 +21,15 @@ try {
 if (release && (commit !== pin.ref || status)) throw new Error('Release requires clean corresponding source, provenance and corpora at the reviewed core-source.json pin.');
 // Fail before any build when a required frozen corpus or source record is missing.
 const corpora = await readParityCorpora(browser, {release});
+const selectedCorpus = corpora.find(corpus => corpus.relativePath === 'tests/scale-corpus/rc6-fresh/cases.json');
+if (!selectedCorpus) throw new Error('Selected-language parity requires the public RC6 fresh corpus.');
 for (const file of browserSourceFiles) await readFile(path.join(browser, file));
 await rm(core, { recursive: true, force: true });
 await cp(sourceCore, core, { recursive: true });
 if (JSON.parse(await readFile(path.join(core, 'package.json'), 'utf8')).name !== '@localcorrect/core') throw new Error('Core identity mismatch');
 const dotnet = arg('--dotnet') || 'dotnet';
 await mkdir('native/assets', { recursive: true });
-await build({ entryPoints: [path.join(core, 'src/index.js')], bundle: true, format: 'iife', globalName: 'LocalCorrectCore', target: 'es2022', outfile: 'native/assets/core.js', legalComments: 'eof' });
+await build({ entryPoints: ['native/Engine/core-entry.mjs'], bundle: true, format: 'iife', globalName: 'LocalCorrectCore', target: 'es2022', outfile: 'native/assets/core.js', legalComments: 'eof' });
 await cp(path.join(core, 'models/context-encoder.onnx'), 'native/assets/context-encoder.onnx');
 for (const language of ['en', 'de']) await cp(path.join(core, 'dictionaries', `${language}.txt`), `native/assets/${language}.txt`);
 const tree = createHash('sha256');
@@ -71,12 +73,22 @@ for (const corpus of corpora) {
     fixtures.push({language: row.language, text: row.input, mode, expected: await reference.correct(row.input, {language: row.language, mode})});
   }
 }
+// Keep the complete legacy mixed-scope sequence, then exercise the selected
+// language in both seed modes and the public RC6 fresh corpus.
+for (const [language,text] of cases) for (const mode of ['conservative','balanced']) fixtures.push({language,text,mode,mixedLanguage:false,expected:await reference.correct(text,{language,mode,mixedLanguage:false})});
+for (const row of selectedCorpus.rows) for (const mode of selectedCorpus.modes) {
+  fixtures.push({language:row.language,text:row.input,mode,mixedLanguage:false,expected:await reference.correct(row.input,{language:row.language,mode,mixedLanguage:false})});
+}
 await reference.close();
 const infoPath = 'native/assets/build-info.json';
 const info = JSON.parse(await readFile(infoPath, 'utf8'));
 const modelBytes = await readFile('native/assets/context-encoder.onnx');
 info.contextModel = {sha256:createHash('sha256').update(modelBytes).digest('hex'), bytes:modelBytes.length};
 info.parityCases = fixtures.length;
+info.parityCasesByScope = {
+  mixed: fixtures.filter(fixture => fixture.mixedLanguage !== false).length,
+  selected: fixtures.filter(fixture => fixture.mixedLanguage === false).length
+};
 await writeFile(infoPath, JSON.stringify(info, null, 2));
 await writeFile('native/assets/parity.json', JSON.stringify(fixtures));
 if (!process.argv.includes('--skip-tests')) {
