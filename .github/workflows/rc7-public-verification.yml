@@ -1,0 +1,21 @@
+name: Verify published language RC downloads
+on:
+  pull_request:
+    paths:
+      - .github/workflows/rc7-public-verification.yml
+      - .github/transfer/verify-public-releases.py
+permissions: {}
+jobs:
+  verify-public:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'ops/rc6-asset-transfer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify public metadata and every anonymously downloaded byte
+        run: python3 .github/transfer/verify-public-releases.py

@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   transfer:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'ops/rc6-asset-transfer'
+    if: github.event.action == 'opened' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'ops/rc6-asset-transfer'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
