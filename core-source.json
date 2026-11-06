@@ -1,5 +1,5 @@
 {
   "repository": "mrksrus/localcorrect-browser",
-  "ref": "90d99e42934dc70571e717760a63b775b713935e",
-  "releaseGate": "Browser RC6 frozen trained contextual core. Full 6200 synthetic documents in both modes: zero observed unwanted edits. Independent200 has9wanted0unwanted107misses, equal to RC5; two semantic audits support21additional partial repairs on3200real learner pairs, whole-document exactness unchanged. Promote only the exact passing Windows CI artifact unchanged. Actual Outlook2019x86/x64 device acceptance remains unverified; unsigned experimental candidate."
+  "ref": "3a7b7aecfc628a49e2dd65f987e79bd360d67cfb",
+  "releaseGate": "Browser RC7 explicit selected-language vocabulary. Exact ONNX weights, tokenizer/actions and neural thresholds unchanged from RC6. Full6200 known synthetic documents in BOTH scopes and BOTH modes: zero observed unwanted edits; wanted4471mixed/4588selected, former200auditunchanged. Required6844JS/nativeparity cases include6622mixed+222selected. Promote the exact passing Windows CI artifact unchanged. Physical Outlook2019 COM/formatting/Undo acceptance remains unverified; unsigned experimental prerelease."
 }

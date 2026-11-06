@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFrameworks>net48;net10.0</TargetFrameworks><OutputType>Exe</OutputType><AssemblyName>LocalCorrect.Wire.Tests</AssemblyName><PlatformTarget>AnyCPU</PlatformTarget><Prefer32Bit>false</Prefer32Bit></PropertyGroup>
-  <ItemGroup><Compile Include="../Engine/Contracts.cs" Link="Contracts.cs" /><Compile Include="../Engine/Protocol.cs" Link="Protocol.cs" /><Compile Include="../Engine/HelperConnection.cs" Link="HelperConnection.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../AddIn/MixedLanguageSetting.cs" Link="MixedLanguageSetting.cs" /><Compile Include="../Engine/Contracts.cs" Link="Contracts.cs" /><Compile Include="../Engine/Protocol.cs" Link="Protocol.cs" /><Compile Include="../Engine/HelperConnection.cs" Link="HelperConnection.cs" /></ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'"><Reference Include="System.Runtime.Serialization" /><Reference Include="System.Xml" /></ItemGroup>
 </Project>

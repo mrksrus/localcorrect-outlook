@@ -29,16 +29,37 @@ Check("please keep the mesage", "en", "please keep the mesage");
 Check("Bitte senden Sie die Rehcnung.", "de", "Bitte senden Sie die Rechnung.");
 Check("https://example.com/seperate a@documetn.com `seperate`\n-- \nseperate", "en", "https://example.com/seperate a@documetn.com `seperate`\n-- \nseperate");
 Check("📧 please documetn this", "en", "📧 please document this");
+foreach (var sample in new[] {
+    new { Text = "please teh documetn", Language = "en", Expected = "please the document" },
+    new { Text = "Bitte senden Sie die Rehcnung.", Language = "de", Expected = "Bitte senden Sie die Rechnung." },
+}) {
+    var legacy = engine.Correct(sample.Text, sample.Language, "conservative");
+    var explicitMixed = engine.Correct(sample.Text, sample.Language, "conservative", mixedLanguage: true);
+    if (legacy.text != explicitMixed.text || Serialize(legacy.edits) != Serialize(explicitMixed.edits) || legacy.skipped != explicitMixed.skipped) throw new Exception("Explicit mixed scope changed legacy correction");
+    if (engine.Correct(sample.Text, sample.Language, "conservative", mixedLanguage: false).text != sample.Expected) throw new Exception("Selected-only scope lost selected-language spelling corrections");
+}
+Console.WriteLine("PASS legacy mixed scope and selected-language spelling in both languages");
+foreach (var sample in new[] {
+    new { Text = "Please unterstand the instructions.", Language = "en", Expected = "Please understand the instructions." },
+    new { Text = "halloo zusammen", Language = "de", Expected = "hallo zusammen" },
+}) foreach (var mode in new[] { "conservative", "balanced" }) {
+    if (engine.Correct(sample.Text, sample.Language, mode).text != sample.Text || engine.Correct(sample.Text, sample.Language, mode, mixedLanguage: true).text != sample.Text) throw new Exception("Legacy mixed vocabulary protection changed");
+    if (engine.Correct(sample.Text, sample.Language, mode, mixedLanguage: false).text != sample.Expected) throw new Exception("Selected-language scope did not reach the lexical policy");
+    if (engine.Correct(sample.Text, sample.Language, mode).text != sample.Text) throw new Exception("Selected-language scope leaked into the next legacy request");
+}
+Console.WriteLine("PASS selected-language vocabulary differs from mixed protection in both languages and modes");
 bool rejected = false;
 try { Corrector.Validate("abc", new Result { edits = new[] { new Edit { offset = 2, length = 4, original = "x", replacement = "y" } } }); } catch (InvalidOperationException) { rejected = true; }
 if (!rejected) throw new Exception("Out-of-bounds edit was accepted");
 Console.WriteLine("PASS edit validation");
 
-var quoted = engine.Correct("documetn", "en", "conservative", "From: someone\ndocumetn", 14);
-if (quoted.edits.Length != 0) throw new Exception("Selection lost quote context");
-foreach (var greeting in new[] {"Hallo", "hallo", "HALLO"}) {
-    var selectedName = engine.Correct("Rehcnung", "de", "conservative", greeting + " Rehcnung", greeting.Length + 1);
-    if (selectedName.edits.Length != 0) throw new Exception("Selection lost salutation protection");
+foreach (var mixedLanguage in new[] { true, false }) {
+    var quoted = engine.Correct("documetn", "en", "conservative", "From: someone\ndocumetn", 14, mixedLanguage);
+    if (quoted.edits.Length != 0) throw new Exception("Selection lost quote context");
+    foreach (var greeting in new[] {"Hallo", "hallo", "HALLO"}) {
+        var selectedName = engine.Correct("Rehcnung", "de", "conservative", greeting + " Rehcnung", greeting.Length + 1, mixedLanguage);
+        if (selectedName.edits.Length != 0) throw new Exception("Selection lost salutation protection");
+    }
 }
 Console.WriteLine("PASS selected text preserves full-document quote and salutation protection");
 foreach (var sample in new[] {
@@ -69,7 +90,7 @@ using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("p
     var fixtures = (Fixture[])new DataContractJsonSerializer(typeof(Fixture[])).ReadObject(stream);
     int count = 0;
     foreach (var fixture in fixtures) {
-        var result = engine.Correct(fixture.text, fixture.language, fixture.mode);
+        var result = engine.Correct(fixture.text, fixture.language, fixture.mode, mixedLanguage: fixture.mixedLanguage ?? true);
         var expected = fixture.expected;
         if (result.text != expected.text || Serialize(result.edits) != Serialize(expected.edits) || result.skipped != expected.skipped) throw new Exception("Jint/JavaScript parity mismatch at case " + count);
         count++;
@@ -101,5 +122,6 @@ public sealed class Fixture {
     public string text { get; set; }
     public string language { get; set; }
     public string mode { get; set; }
+    public bool? mixedLanguage { get; set; }
     public Result expected { get; set; }
 }

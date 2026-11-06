@@ -6,8 +6,8 @@ import path from 'node:path';
 export const browserSourceDirectories = ['packages/core', 'tests', 'scripts', 'extension', 'licenses', 'benchmarks'];
 export const browserSourceFiles = [
   'package.json', 'package-lock.json', 'README.md', 'USAGE.md', 'QUALITY.md', 'THIRD_PARTY.md',
-  'dictionary-sources.json', 'lexicon-sources.json', 'typo-sources.json',
-  'candidate-sources.json', 'context-data-sources.json', 'context-wikipedia-sources.json', 'context-pretrained-sources.json', 'context-model-sources.json', 'context-requirements-lock.txt', 'MODEL.md', 'protect-sources.json', 'ambiguity-sources.json', 'inflection-sources.json',
+  'dictionary-sources.json', 'lexicon-sources.json', 'typo-sources.json', 'typo-language-sources.json',
+  'candidate-sources.json', 'context-data-sources.json', 'context-wikipedia-sources.json', 'context-pretrained-sources.json', 'context-model-sources.json', 'context-requirements-lock.txt', 'MODEL.md', 'protect-sources.json', 'ambiguity-sources.json', 'ambiguity-language-sources.json', 'inflection-sources.json',
   'evaluation-freeze.json', 'EVALUATION.json', 'LICENSE'
 ];
 const emailPaths = ['tests/email-corpus/dev.json', 'tests/email-corpus/holdout.json'];

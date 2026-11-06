@@ -108,6 +108,13 @@ if (args.Length >= 1 && args.Length <= 2) {
     Console.WriteLine($"Actual helper cold readiness: {start.Elapsed.TotalMilliseconds:F1} ms");
     Require(actual.Correct("synthetic", "en", "conservative",null,0).text=="synthetic","Actual helper failed");
     Require(actual.Correct("She have finished the first draft of the leaflet.", "en", "conservative",null,0).text=="She has finished the first draft of the leaflet.","Actual helper neural correction failed");
+    foreach (var sample in new[] {
+        new { Text="Please unterstand the instructions.", Language="en", Expected="Please understand the instructions." },
+        new { Text="halloo zusammen", Language="de", Expected="hallo zusammen" },
+    }) {
+        Require(actual.Correct(sample.Text,sample.Language,"conservative",null,0).text==sample.Text,"Actual helper changed legacy mixed protection");
+        Require(actual.Correct(sample.Text,sample.Language,"conservative",null,0,false).text==sample.Expected,"Actual helper lost selected-language scope");
+    }
     foreach(var greeting in new[]{"Hallo","hallo","HALLO","Sehr geehrter Herr"}) Require(actual.Correct("Rehcnung","de","conservative",greeting+" Rehcnung",greeting.Length+1).edits.Length==0,"Actual helper selection lost greeting protection");
     Reject(()=>actual.Correct("documetn","en","conservative","documetn\u200dname",0),"Actual helper accepted a joined-token selection");
     Require(actual.Correct("synthetic","en","conservative",null,0).text=="synthetic","Actual helper did not restart after rejecting the malformed selection");
@@ -115,11 +122,11 @@ if (args.Length >= 1 && args.Length <= 2) {
     using (var process = Process.GetProcessById(actual.ProcessId)) Console.WriteLine($"Actual helper peak working set: {process.PeakWorkingSet64 / 1024 / 1024} MiB");
     if(args.Length==2) {
         using var fixtures=JsonDocument.Parse(File.ReadAllText(args[1]));
-        foreach(var language in new[]{"en","de"}) {
+        foreach(var mixedLanguage in new[]{true,false}) foreach(var language in new[]{"en","de"}) {
             var fixture=fixtures.RootElement.EnumerateArray().First(row=>row.GetProperty("language").GetString()==language && row.GetProperty("text").GetString().Length>=4500 && row.GetProperty("text").GetString().Split((char[])null,StringSplitOptions.RemoveEmptyEntries).Length>=900);
             var samples=new double[3]; var text=fixture.GetProperty("text").GetString();
-            for(int i=0;i<samples.Length;i++){var latency=Stopwatch.StartNew();actual.Correct(text,language,"conservative",null,0);samples[i]=latency.Elapsed.TotalMilliseconds;}
-            Console.WriteLine($"Actual helper warm ~1000-word {language} roundtrip, ms: {string.Join(", ",samples.Select(sample=>sample.ToString("F1",System.Globalization.CultureInfo.InvariantCulture)))}");
+            for(int i=0;i<samples.Length;i++){var latency=Stopwatch.StartNew();actual.Correct(text,language,"conservative",null,0,mixedLanguage);samples[i]=latency.Elapsed.TotalMilliseconds;}
+            Console.WriteLine($"Actual helper warm ~1000-word {(mixedLanguage ? "mixed" : "selected")} {language} roundtrip, ms: {string.Join(", ",samples.Select(sample=>sample.ToString("F1",System.Globalization.CultureInfo.InvariantCulture)))}");
         }
         using var process=Process.GetProcessById(actual.ProcessId); Console.WriteLine($"Actual helper final peak working set: {process.PeakWorkingSet64/1024/1024} MiB");
     }
@@ -131,10 +138,17 @@ if (args.Length >= 1 && args.Length <= 2) {
         using var child=Process.Start(info);
         Frames.Write(child.StandardInput.BaseStream,new Request {version=1,operation="ready"});
         Require(Frames.Read<Response>(child.StandardOutput.BaseStream).status=="ready","Actual helper handshake failed");
+        // An old producer omits the new field. Reuse this real helper to verify
+        // that omitted fields and explicit false both reach the correction API.
+        foreach (bool? scope in new bool?[] { null, false }) {
+            Frames.Write(child.StandardInput.BaseStream,new Request {version=1,operation="correct",text="Please unterstand the instructions.",language="en",mode="conservative",mixedLanguage=scope});
+            var response=Frames.Read<Response>(child.StandardOutput.BaseStream);
+            Require(response.status=="ok" && response.result.text==(scope==false ? "Please understand the instructions." : "Please unterstand the instructions."),"Actual helper rejected compatible language scope");
+        }
         child.StandardInput.BaseStream.Write(bytes); child.StandardInput.Close();
         if(!child.WaitForExit(20000)){child.Kill();throw new Exception("Malformed request left actual helper alive");}
         Require(child.ExitCode!=0 && child.StandardOutput.ReadToEnd().Length==0 && child.StandardError.ReadToEnd().Length==0,"Actual helper did not fail silently on malformed frame");
     }
 }
-Console.WriteLine("PASS bounded frames, malformed UTF8/JSON, original spans/output, startup timeout, correction timeout, crash, oversize, EOF, disposal and restart");
+Console.WriteLine("PASS bounded frames, malformed UTF8/JSON, original spans/output, startup timeout, correction timeout, crash, oversize, EOF, disposal, restart and compatible language scope");
 return 0;

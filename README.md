@@ -3,10 +3,10 @@
 A local English/German typo corrector for classic Outlook 2019 on Windows.
 Press an editable shortcut to correct selected prose or the compose body.
 Corrections happen in place, preserve surrounding formatting and form one Word
-Undo operation. A ribbon button and settings dialog are included.
+Undo operation. A ribbon button and settings dialog are included. Settings selects English or German and whether to preserve vocabulary from both languages. Mixed-language vocabulary stays enabled for older saved settings; turn it off for text written only in the selected language.
 
-Experimental candidate: native `1.0.0-rc.5`, using the browser RC6 contextual core.
-[Download the native RC5 installer and build evidence](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v1.0.0-rc.5).
+Experimental candidate: native `1.0.0-rc.6`, using the browser RC7 language-aware core and unchanged RC6 neural model.
+[Download the native RC6 installer and build evidence](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v1.0.0-rc.6).
 Actual Outlook 2019 acceptance remains unverified. Release artifacts require the
 exact passing Windows CI build; CI logs and digests are linked from the release.
 [Download the fixed native RC3 baseline installer](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v1.0.0-rc.3).
@@ -53,8 +53,7 @@ difficult. Review important messages before sending.
 The exact shared source pin is in [core-source.json](core-source.json).
 [Earlier native RC4 shared-core quality report](https://github.com/mrksrus/localcorrect-browser/blob/57ed9d3c4e1b087c4f27fdd9eeb8fc41db17c32d/QUALITY.md)
 records that release's synthetic corpora, including the browser RC5 audits,
-wanted/wrong/missed edit counts, provenance and comparisons. Those results do not
-establish native RC5 quality. The RC5 build compares JavaScript/Jint outputs and
+wanted/wrong/missed edit counts, provenance and comparisons. Those historical results do not establish native RC6 quality. The RC6 build compares JavaScript/Jint outputs in both vocabulary scopes and
 edit spans, checks ONNX tensor parity and exercises the helper protocol;
 correction quality comes from the final shared-core evaluation.
 Browser RC4 and native RC3 remain fixed comparison releases.

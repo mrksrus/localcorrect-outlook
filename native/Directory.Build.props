@@ -1,4 +1,4 @@
 <Project>
-  <PropertyGroup><Version>1.0.0-rc.5</Version><AssemblyVersion>1.0.0.0</AssemblyVersion><FileVersion>1.0.0.5</FileVersion><LangVersion>latest</LangVersion><Nullable>disable</Nullable><Deterministic>true</Deterministic><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile></PropertyGroup>
+  <PropertyGroup><Version>1.0.0-rc.6</Version><AssemblyVersion>1.0.0.0</AssemblyVersion><FileVersion>1.0.0.6</FileVersion><LangVersion>latest</LangVersion><Nullable>disable</Nullable><Deterministic>true</Deterministic><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile></PropertyGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net48'"><PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" /></ItemGroup>
 </Project>

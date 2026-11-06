@@ -85,7 +85,7 @@ test('native candidate version agrees across package, assembly and installer met
   const lock = JSON.parse(await readFile('package-lock.json', 'utf8'));
   const props = await readFile('native/Directory.Build.props', 'utf8');
   const installer = await readFile('native/Installer/Program.cs', 'utf8');
-  assert.equal(pkg.version, '1.0.0-rc.5');
+  assert.equal(pkg.version, '1.0.0-rc.6');
   assert.equal(lock.version, pkg.version); assert.equal(lock.packages[''].version, pkg.version);
   assert.ok(props.includes('<Version>' + pkg.version + '</Version>'));
   assert.ok(installer.includes('key.SetValue("DisplayVersion", "' + pkg.version + '")'));

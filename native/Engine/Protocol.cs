@@ -14,6 +14,7 @@ namespace LocalCorrect {
         [DataMember] public string mode;
         [DataMember] public string context;
         [DataMember] public int contextOffset;
+        [DataMember(EmitDefaultValue=false)] public bool? mixedLanguage;
     }
     [DataContract] internal sealed class Response {
         [DataMember(IsRequired=true)] public int version;
@@ -59,12 +60,17 @@ namespace LocalCorrect {
             Utf8.GetString(bytes); // Reject malformed UTF-8 before JSON deserialization.
             // A complete JSON reader pass rejects trailing documents, duplicate
             // envelope members and unknown envelope fields before deserializing.
-            var allowed = typeof(T) == typeof(Request) ? new HashSet<string> { "version", "operation", "text", "language", "mode", "context", "contextOffset" } : new HashSet<string> { "version", "status", "result" };
+            var allowed = typeof(T) == typeof(Request) ? new HashSet<string> { "version", "operation", "text", "language", "mode", "context", "contextOffset", "mixedLanguage" } : new HashSet<string> { "version", "status", "result" };
             var seen = new HashSet<string>();
             using (var reader = JsonReaderWriterFactory.CreateJsonReader(bytes, new XmlDictionaryReaderQuotas { MaxDepth = 32, MaxStringContentLength = MaxBytes, MaxArrayLength = MaxBytes, MaxBytesPerRead = 4096, MaxNameTableCharCount = 4096 })) {
                 while (reader.Read()) {
                     if (reader.NodeType == XmlNodeType.Element && reader.Depth == 0 && (reader.LocalName != "root" || reader.GetAttribute("type") != "object")) throw new InvalidDataException();
-                    if (reader.NodeType == XmlNodeType.Element && reader.Depth == 1 && (!allowed.Contains(reader.LocalName) || !seen.Add(reader.LocalName))) throw new InvalidDataException();
+                    if (reader.NodeType == XmlNodeType.Element && reader.Depth == 1) {
+                        if (!allowed.Contains(reader.LocalName) || !seen.Add(reader.LocalName)) throw new InvalidDataException();
+                        // Reject strings, numbers, null and containers instead of
+                        // allowing serializer coercion of this optional boolean.
+                        if (typeof(T) == typeof(Request) && reader.LocalName == "mixedLanguage" && reader.GetAttribute("type") != "boolean") throw new InvalidDataException();
+                    }
                 }
             }
             using (var data = new MemoryStream(bytes, false)) {
