@@ -1,0 +1,50 @@
+{
+  "scope": "Local Linux .NET10 helper through bounded anonymous pipes. Excludes Outlook/COM overhead. Measures the committed functional source; the promoted Windows installer is checked separately in CI.",
+  "nativeCommit": "7ab5510c6d88d8361b10571a7f59ed2bbbff611c",
+  "browserCommit": "3a7b7aecfc628a49e2dd65f987e79bd360d67cfb",
+  "cpu": "Intel Core i5-1038NG7",
+  "ram": "DDR4, approximately32GiB",
+  "modelSha256": "899628b5f9ab75a075f158ffeadc9e30aea36e5f03e9c24facb11e87241e9e59",
+  "coldReadyMilliseconds": 19948.0,
+  "peakHelperMiB": 613,
+  "warmApproximately1000WordsMilliseconds": {
+    "mixed": {
+      "en": [
+        556.2,
+        346.4,
+        343.6
+      ],
+      "de": [
+        613.9,
+        381.8,
+        401.9
+      ]
+    },
+    "selected": {
+      "en": [
+        273.6,
+        276.9,
+        267.3
+      ],
+      "de": [
+        286.5,
+        282.3,
+        309.2
+      ]
+    }
+  },
+  "preparesBothSelectedVocabulariesBeforeReady": true,
+  "physicalOutlookAcceptance": false,
+  "functionalSourceSha256": {
+    "native/Engine/Corrector.cs": "c9514176fb60aea59148bd7a6025faab2de6189c9d4fa41d6827b95fc814db8a",
+    "native/Engine/Contracts.cs": "589bb03550c8800140a84c2019797b87321c5cf928b29c8d5dbb415916b4bb54",
+    "native/Engine/ContextModel.cs": "e9ba9db6b8c92c8382c610483a5dbbe8df090dc1b37d46009e5d14c3f4c7b286",
+    "native/Engine/Protocol.cs": "6929285c664d7acc1ca208e771d6f6cd5e300f82d6350fd97fadc4a5d5452686",
+    "native/Engine/Corrector.Proxy.cs": "c24aafe2386451cf4d39ff8cbc94f1e766186004c9a77b8c7e70daa0cd447b4c",
+    "native/Engine/AssemblyInfo.cs": "e5ef252649e19aa7f4bbe3e91bdc9719fb49a47d9e4dc0669e98f9189682925d",
+    "native/Engine/HelperConnection.cs": "eb2a6ea4ed7b227d8912f31ea36cbd5370e846adceeac4c46505d31d499cceef",
+    "native/Engine/core-entry.mjs": "4d8b7ae7622d3ae22ca0392094c3e692b5c84f2dc6931cda5c40848ea06999f4",
+    "native/Helper/Program.cs": "71141a4fa7911ac15581d12a753290031a671d0aed96bd2cf9d17656b816a8e4"
+  },
+  "fixturesSha256": "2d7800a4c6100995095f036d5371bce102ff6d32cb3e7b536833713089064aba"
+}

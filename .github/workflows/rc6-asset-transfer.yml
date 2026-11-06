@@ -1,0 +1,29 @@
+name: Promote tested native RC6 artifact to draft
+on:
+  pull_request:
+    paths:
+      - .github/workflows/rc6-asset-transfer.yml
+      - .github/transfer/native-transfer.py
+      - .github/transfer/native-helper-benchmark.json
+permissions: {}
+concurrency:
+  group: native-rc6-asset-transfer
+  cancel-in-progress: false
+jobs:
+  transfer:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'ops/rc6-asset-transfer'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify and transfer existing CI artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 .github/transfer/native-transfer.py
