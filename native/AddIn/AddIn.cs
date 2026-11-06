@@ -116,6 +116,7 @@ namespace LocalCorrect.Outlook {
             corrector = (Corrector)engineDomain.CreateInstanceAndUnwrap(typeof(Corrector).Assembly.FullName, typeof(Corrector).FullName);
         }
         void ResetEngine() {
+            try { corrector?.Dispose(); } catch { }
             corrector = null; var domain = engineDomain; engineDomain = null;
             if (domain != null) { try { AppDomain.Unload(domain); } catch { } }
         }

@@ -3,7 +3,10 @@ on: [pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
-  native:
+  wire-check:
+    uses: ./.github/workflows/native-wire.yml
+  native-windows:
+    needs: wire-check
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -16,7 +19,7 @@ jobs:
           python-version: '3.12'
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '10.0.403'
       - run: npm ci
       - run: npm test
       - name: Read reviewed core pin
@@ -30,6 +33,7 @@ jobs:
           ref: ${{ steps.core.outputs.ref }}
           path: .core-checkout
           persist-credentials: false
+      - run: npm ci --prefix .core-checkout
       - run: npm run build:native -- --core .core-checkout --release --locked
       - name: Verify Windows executable
         shell: pwsh
@@ -43,4 +47,34 @@ jobs:
           path: |
             dist/LocalCorrect-Outlook-Setup.exe
             dist/LocalCorrect-Outlook-Setup.exe.sha256
+  native-linux:
+    needs: wire-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.403'
+      - run: npm ci
+      - run: npm test
+      - name: Read reviewed core pin
+        id: core
+        shell: bash
+        run: |
+          node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync("core-source.json")); if(!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(p.repository)||!/^[a-f0-9]{40}$/.test(p.ref)) throw new Error("Pin reviewed core first"); fs.appendFileSync(process.env.GITHUB_OUTPUT,`repository=${p.repository}\nref=${p.ref}\n`);'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.core.outputs.repository }}
+          ref: ${{ steps.core.outputs.ref }}
+          path: .core-checkout
+          persist-credentials: false
+      - run: npm ci --prefix .core-checkout
+      - run: npm run build:native -- --core .core-checkout --locked
 # Build and engine tests only. A hosted runner without Outlook is not COM/Office acceptance.

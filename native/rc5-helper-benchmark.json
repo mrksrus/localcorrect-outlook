@@ -1,0 +1,22 @@
+{
+  "scope": "Final isolated Linux .NET10 helper through bounded anonymous pipes. Excludes Outlook application/COM overhead.",
+  "cpu": "Intel Core i5-1038NG7",
+  "ram": "DDR4, approximately32GiB",
+  "modelSha256": "899628b5f9ab75a075f158ffeadc9e30aea36e5f03e9c24facb11e87241e9e59",
+  "coldReadyMilliseconds": 13213.7,
+  "peakHelperMiB": 610,
+  "warmApproximately1000WordsMilliseconds": {
+    "en": [
+      581.4,
+      416.4,
+      387.5
+    ],
+    "de": [
+      641.0,
+      452.7,
+      365.5
+    ]
+  },
+  "nativeArithmeticMaxAbsoluteError": 5.60341e-06,
+  "physicalOutlookAcceptance": false
+}

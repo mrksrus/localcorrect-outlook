@@ -26,12 +26,29 @@ namespace LocalCorrect.Setup {
                     if (MessageBox.Show("Remove LocalCorrect for this Windows user? Saved language and shortcut preferences will remain.", "LocalCorrect", MessageBoxButtons.OKCancel) == DialogResult.OK) { Uninstall(); MessageBox.Show("LocalCorrect was removed. Any modified or unrelated files and their ownership records were retained.", "LocalCorrect"); }
                     return;
                 }
+                if (!Environment.Is64BitOperatingSystem || Environment.OSVersion.Version.Major < 10) throw new InvalidOperationException("LocalCorrect requires 64-bit Windows 10 or 11. Both 32-bit and 64-bit classic Outlook are supported by the bundled 64-bit correction helper.");
                 using (var framework = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full"))
                     if (framework == null || Convert.ToInt32(framework.GetValue("Release", 0)) < 528040) throw new InvalidOperationException("Install Microsoft .NET Framework 4.8 before continuing.");
+                EnsureVisualCppRuntime();
                 if (MessageBox.Show("Install LocalCorrect for classic Outlook 2019 for this Windows user?\n\nEnglish and German correction runs offline. This installs an unsigned COM add-in. Your existing Office security policies remain in force.\n\nClose Outlook first. New Outlook is not supported.", "LocalCorrect setup", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK) return;
                 string retained = Install();
                 MessageBox.Show("Installed. Start classic Outlook, pop out a compose window, and open the LocalCorrect tab. Ctrl+Shift+L corrects selected prose or the body. Change language and shortcut in Settings.\n\nAlways review changes before sending. Ctrl+Z undoes a correction." + (retained == null ? "" : "\n\nRetained files were moved intact to:\n" + retained), "LocalCorrect");
             } catch (Exception ex) { MessageBox.Show(ex.Message, "LocalCorrect setup", MessageBoxButtons.OK, MessageBoxIcon.Error); Environment.ExitCode = 1; }
+        }
+        static void EnsureVisualCppRuntime() {
+            bool supported = false;
+            try {
+                using (var machine = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry64))
+                using (var runtime = machine.OpenSubKey(VisualCppPrerequisite.RegistryPath, false)) {
+                    // Sysnative bypasses WOW64 filesystem redirection if setup is
+                    // ever built as x86. Check only the fixed system directory.
+                    string windows = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                    if (!Path.IsPathRooted(windows)) throw new IOException();
+                    string system = Path.Combine(windows, Environment.Is64BitProcess ? "System32" : "Sysnative");
+                    supported = runtime != null && VisualCppPrerequisite.IsSupported(runtime.GetValue("Installed"), runtime.GetValue("Version", null, RegistryValueOptions.DoNotExpandEnvironmentNames), name => File.Exists(Path.Combine(system, name)));
+                }
+            } catch (System.Security.SecurityException) { } catch (UnauthorizedAccessException) { } catch (IOException) { }
+            if (!supported) throw new InvalidOperationException(VisualCppPrerequisite.MissingMessage);
         }
         static RegistryView[] Views => Environment.Is64BitOperatingSystem ? new[] { RegistryView.Registry32, RegistryView.Registry64 } : new[] { RegistryView.Registry32 };
         static string Install() {
@@ -83,7 +100,7 @@ namespace LocalCorrect.Setup {
                 }
             }
             using (var key = Registry.CurrentUser.CreateSubKey(UninstallKey)) {
-                key.SetValue("LocalCorrectOwner", Owner); key.SetValue("DisplayName", "LocalCorrect for classic Outlook"); key.SetValue("DisplayVersion", "1.0.0-rc.4"); key.SetValue("Publisher", "LocalCorrect contributors"); key.SetValue("InstallLocation", Root); key.SetValue("UninstallString", "\"" + SetupPath + "\" /uninstall"); key.SetValue("NoModify", 1); key.SetValue("NoRepair", 1);
+                key.SetValue("LocalCorrectOwner", Owner); key.SetValue("DisplayName", "LocalCorrect for classic Outlook"); key.SetValue("DisplayVersion", "1.0.0-rc.5"); key.SetValue("Publisher", "LocalCorrect contributors"); key.SetValue("InstallLocation", Root); key.SetValue("UninstallString", "\"" + SetupPath + "\" /uninstall"); key.SetValue("NoModify", 1); key.SetValue("NoRepair", 1);
             }
         }
         static void RemoveOwnedRegistrations() {
