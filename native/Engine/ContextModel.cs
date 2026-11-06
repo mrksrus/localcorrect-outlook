@@ -12,6 +12,7 @@ namespace LocalCorrect {
     // Only bundled, hash-verified models are accepted. No external-data path is used.
     internal sealed class ContextModel : IDisposable {
         readonly InferenceSession session;
+        static readonly object EnvironmentGate = new object();
         static readonly string[] InputNames = { "input_ids", "attention_mask", "word_positions", "candidate_ids", "candidate_mask" };
         internal ContextModel(Engine engine) {
             Environment.SetEnvironmentVariable("ORT_DISABLE_TELEMETRY", "1");
@@ -25,7 +26,20 @@ namespace LocalCorrect {
                 modelBytes = new byte[checked((int)expected)]; file.ReadExactly(modelBytes);
                 if (Convert.ToHexString(SHA256.HashData(modelBytes)).ToLowerInvariant() != identity.RootElement.GetProperty("modelSha256").GetString()) throw new InvalidDataException("Bundled model identity mismatch.");
             }
-            OrtEnv.Instance().DisableTelemetryEvents();
+            // SessionOptions logging is too late for environment/device discovery.
+            // Create the private process environment with no logging sink first.
+            lock (EnvironmentGate) {
+                if (!OrtEnv.IsCreated) {
+                    var environmentOptions = new EnvironmentCreationOptions {
+                        logId = "LocalCorrect",
+                        logLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_FATAL,
+                        loggingFunction = (parameter, severity, category, logId, location, message) => { }
+                    };
+                    OrtEnv.CreateInstanceWithOptions(ref environmentOptions);
+                }
+                OrtEnv.Instance().EnvLogLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_FATAL;
+                OrtEnv.Instance().DisableTelemetryEvents();
+            }
             using var options = new SessionOptions { IntraOpNumThreads = 2, InterOpNumThreads = 1,
                 ExecutionMode = ExecutionMode.ORT_SEQUENTIAL, LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_FATAL };
             session = new InferenceSession(modelBytes, options);

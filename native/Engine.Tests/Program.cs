@@ -7,6 +7,10 @@ using System.Text;
 using System.Reflection;
 Environment.SetEnvironmentVariable("ORT_DISABLE_TELEMETRY", "1");
 Environment.SetEnvironmentVariable("ORT_RUNNING_UNIT_TESTS", "1");
+if (args.Length != 0) {
+    if (args.Length != 2 || args[0] != "--expected-bitness" || (args[1] != "x86" && args[1] != "x64") || Environment.Is64BitProcess != (args[1] == "x64")) throw new Exception("Client process bitness does not match the required test target.");
+    Console.WriteLine("PASS actual client process bitness " + args[1]);
+}
 var watch = Stopwatch.StartNew();
 #if NET48
 var domain = AppDomain.CreateDomain("LocalCorrect test engine", null, new AppDomainSetup { ApplicationBase = AppDomain.CurrentDomain.BaseDirectory, ConfigurationFile = Assembly.GetExecutingAssembly().Location + ".config" });

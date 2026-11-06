@@ -39,6 +39,8 @@ void Require(bool value, string description) { if (!value) throw new Exception(d
 void Reject(Action action, string description) { bool rejected=false; try { action(); } catch { rejected=true; } Require(rejected, description); }
 foreach (var bytes in new[] {new byte[]{0,0,0,0},new byte[]{255,255,255,255},new byte[]{10,0,0,0,123},new byte[]{1,0,0,0,255},new byte[]{1,0,0,0,33}})
     Reject(() => Frames.Read<Request>(new MemoryStream(bytes)), "Invalid frame accepted");
+foreach (var bytes in new[] {new byte[]{239,187,191},new byte[]{239,187,191,0,0,0,0},new byte[]{239,187,191,255,255,255,255},new byte[]{239,187,191,239,187,191,1,0,0,0,33}})
+    Reject(() => Frames.Read<Request>(new MemoryStream(bytes)), "Invalid preamble-prefixed frame accepted");
 foreach (var json in new[] {"{\"version\":1,\"operation\":\"ready\",\"unknown\":true}","{\"version\":1,\"version\":2,\"operation\":\"ready\"}","{\"version\":1,\"operation\":\"ready\"}{}"}) {
     var bytes=Encoding.UTF8.GetBytes(json); var prefix=BitConverter.GetBytes(bytes.Length);
     using var stream=new MemoryStream(); stream.Write(prefix); stream.Write(bytes); stream.Position=0;
@@ -47,6 +49,12 @@ foreach (var json in new[] {"{\"version\":1,\"operation\":\"ready\",\"unknown\":
 using (var stream = new MemoryStream()) {
     Frames.Write(stream, new Request {version=1,operation="correct",text="synthetic 📧 Ä"}); stream.Position=0;
     Require(Frames.Read<Request>(stream).text == "synthetic 📧 Ä", "UTF8 roundtrip failed");
+}
+using (var stream = new MemoryStream()) {
+    stream.Write(new byte[]{239,187,191});
+    Frames.Write(stream, new Request {version=1,operation="ready"});
+    Frames.Write(stream, new Request {version=1,operation="correct",text="synthetic 📧 Ä"}); stream.Position=0;
+    Require(Frames.Read<Request>(stream).operation=="ready" && Frames.Read<Request>(stream).text=="synthetic 📧 Ä","Framework UTF8 preamble disrupted binary framing");
 }
 Reject(() => Corrector.Validate("abc",new Result {text="altered",edits=Array.Empty<Edit>()}),"Unexplained output accepted");
 Reject(() => Corrector.Validate("abc",new Result {text="abc",edits=new[]{new Edit{offset=0,length=1,original="x",replacement="a"}}}),"Wrong original accepted");

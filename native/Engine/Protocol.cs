@@ -41,6 +41,17 @@ namespace LocalCorrect {
         }
         internal static T Read<T>(Stream stream) {
             var prefix = new byte[4]; ReadExactly(stream, prefix, 4);
+            // Framework Process.Start creates a redirected StreamWriter with
+            // Console.InputEncoding and AutoFlush=true. Under UTF-8 it writes
+            // one BOM before callers can use BaseStream, even for binary I/O.
+            // Framework has no per-process StandardInputEncoding override.
+            // No valid <=8 MiB length starts EF BB BF, so remove only that
+            // exact preamble; malformed/truncated/repeated preambles still fail.
+            if (prefix[0] == 0xEF && prefix[1] == 0xBB && prefix[2] == 0xBF) {
+                var remaining = new byte[3]; ReadExactly(stream, remaining, remaining.Length);
+                prefix[0] = prefix[3];
+                for (int i = 0; i < remaining.Length; i++) prefix[i + 1] = remaining[i];
+            }
             uint length = (uint)prefix[0] | (uint)prefix[1] << 8 | (uint)prefix[2] << 16 | (uint)prefix[3] << 24;
             if (length == 0 || length > MaxBytes) throw new InvalidDataException();
             var bytes = new byte[(int)length]; ReadExactly(stream, bytes, bytes.Length);

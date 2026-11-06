@@ -44,6 +44,13 @@ const scaleCorpusSha256 = Object.fromEntries(corpora.filter(corpus => corpus.rel
 await writeFile('native/assets/build-info.json', JSON.stringify({ coreCommit: commit, coreDirty: !!status, emailCorpusSha256, scaleCorpusSha256, corpusSha256, corpusCases, coreTreeSha256: tree.digest('hex'), version, runtime: 'Jint 4.17.0 / ONNX Runtime 1.31.1 / isolated .NET 10 win-x64 helper; .NET Framework 4.8 COM proxy', release }, null, 2));
 await rm('native/AddIn/bin/Release/net48', {recursive:true, force:true});
 execFileSync(dotnet, ['build', 'native/AddIn/LocalCorrect.Outlook.csproj', '-c', 'Release', ...(process.argv.includes('--locked') ? ['-p:RestoreLockedMode=true'] : [])], { stdio: 'inherit' });
+// Verify startup logging before the longer corpus pass. Session logging alone
+// does not cover ORT environment/device discovery.
+if (!process.argv.includes('--skip-tests')) {
+  const project = 'native/OrtPrivacy.Tests/LocalCorrect.OrtPrivacy.Tests.csproj';
+  execFileSync(dotnet, ['restore', project, ...(process.argv.includes('--locked') ? ['--locked-mode'] : [])], {stdio:'inherit'});
+  execFileSync(dotnet, ['run', '--project', project, '-c', 'Release', '--no-restore'], {stdio:'inherit'});
+}
 // Generate exact expected edits in the JavaScript implementation, then execute the same inputs in Jint.
 const {createContextReference} = await import(pathToFileURL(path.join(browser, 'scripts/context-reference.mjs')).href);
 const reference = await createContextReference();
@@ -105,7 +112,7 @@ if (!process.argv.includes('--skip-tests')) {
     await rm(output, {recursive:true, force:true});
     execFileSync(dotnet, ['build', 'native/Engine.Tests/LocalCorrect.Engine.Tests.csproj', '-f', 'net48', '-c', 'Release', '-p:PlatformTarget=' + bitness, '-p:RuntimeIdentifier=', '-t:Rebuild', '-p:OutputPath=' + output, '--no-restore'], {stdio:'inherit'});
     await cp(helper, path.join(output, 'native-helper'), {recursive:true});
-    execFileSync(path.join(output, 'LocalCorrect.Engine.Tests.exe'), [], {stdio:'inherit'});
+    execFileSync(path.join(output, 'LocalCorrect.Engine.Tests.exe'), ['--expected-bitness', bitness], {stdio:'inherit'});
   }
 }
 await rm('build/native', { recursive: true, force: true }); await mkdir('build/native/payload', { recursive: true });

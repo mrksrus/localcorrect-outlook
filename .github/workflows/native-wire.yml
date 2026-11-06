@@ -1,0 +1,32 @@
+name: Native binary wire
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  windows-wire:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.403'
+      - name: Build and exercise binary transport without model startup
+        shell: pwsh
+        run: |
+          $project = 'native/Wire.Tests/LocalCorrect.Wire.Tests.csproj'
+          dotnet restore $project --locked-mode -p:RuntimeIdentifier=
+          if ($LASTEXITCODE -ne 0) { throw 'Wire restore failed' }
+          dotnet build $project -f net10.0 -c Release --no-restore -p:RuntimeIdentifier=
+          if ($LASTEXITCODE -ne 0) { throw 'Wire helper build failed' }
+          $helper = (Resolve-Path 'native/Wire.Tests/bin/Release/net10.0/LocalCorrect.Wire.Tests.exe').Path
+          & $helper
+          if ($LASTEXITCODE -ne 0) { throw 'Modern wire test failed' }
+          foreach ($bits in @('x86', 'x64')) {
+            $output = Join-Path $PWD "build/wire/$bits/"
+            dotnet build $project -f net48 -c Release --no-restore -p:RuntimeIdentifier= -p:PlatformTarget=$bits -t:Rebuild "-p:OutputPath=$output"
+            if ($LASTEXITCODE -ne 0) { throw "Wire $bits build failed" }
+            & (Join-Path $output 'LocalCorrect.Wire.Tests.exe') $helper
+            if ($LASTEXITCODE -ne 0) { throw "Wire $bits client failed" }
+          }
