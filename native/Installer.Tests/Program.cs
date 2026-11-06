@@ -17,6 +17,17 @@ string Fixture(string name) {
 }
 void Refuses(Action action) { bool refused = false; try { action(); } catch (InvalidOperationException) { refused = true; } catch (InvalidDataException) { refused = true; } Assert(refused, "Unsafe ownership state was accepted"); }
 try {
+    foreach (var version in new[] { "v14.44.35229.0", "14.51.36247.0", " v14.44.0 " })
+        Assert(VisualCppPrerequisite.IsSupported(1, version, _ => true), "Supported x64 VC runtime was refused");
+    foreach (var version in new object[] { null, "", "not a version", "v14.43.99999.0", "13.99.0", "15.0.0", 1444 })
+        Assert(!VisualCppPrerequisite.IsSupported(1, version, _ => true), "Missing, malformed or unsupported VC version was accepted");
+    foreach (var installed in new object[] { null, 0, 2, "1", true })
+        Assert(!VisualCppPrerequisite.IsSupported(installed, "14.44.35229.0", _ => true), "Missing or invalid VC installed state was accepted");
+    foreach (string missingDll in VisualCppPrerequisite.SystemDlls)
+        Assert(!VisualCppPrerequisite.IsSupported(1, "14.44.35229.0", name => name != missingDll), "A missing system VC DLL was accepted");
+    Assert(VisualCppPrerequisite.MissingMessage.Contains(VisualCppPrerequisite.DownloadUrl) && VisualCppPrerequisite.MissingMessage.Contains("x64"), "VC prerequisite guidance lost its official URL or architecture");
+    Console.WriteLine("PASS VC prerequisite supported versions, invalid/missing registry data and each missing system DLL");
+
     string clean = Fixture("clean"); OwnedInstallation.DeleteOwnedFiles(clean, Owner);
     Assert(!Directory.Exists(clean), "Clean uninstall retained the installation"); passed++;
 

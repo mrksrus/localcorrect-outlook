@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
-<PropertyGroup><TargetFrameworks>net48;net10.0</TargetFrameworks><AssemblyName>LocalCorrect.Engine</AssemblyName></PropertyGroup>
-<ItemGroup><PackageReference Include="Jint" Version="4.17.0" /></ItemGroup>
-<ItemGroup><EmbeddedResource Include="../assets/core.js" LogicalName="LocalCorrect.core.js" /><EmbeddedResource Include="../assets/en.txt" LogicalName="LocalCorrect.en.txt" /><EmbeddedResource Include="../assets/de.txt" LogicalName="LocalCorrect.de.txt" /></ItemGroup>
-<ItemGroup Condition="'$(TargetFramework)' == 'net48'"><Reference Include="System.Runtime.Serialization" /></ItemGroup>
+<PropertyGroup><TargetFrameworks>net48;net10.0</TargetFrameworks><AssemblyName>LocalCorrect.Engine</AssemblyName><RuntimeIdentifiers>linux-x64;win-x64</RuntimeIdentifiers></PropertyGroup>
+<ItemGroup Condition="'$(TargetFramework)' != 'net48'"><PackageReference Include="Jint" Version="4.17.0" /><PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" /></ItemGroup>
+<ItemGroup Condition="'$(TargetFramework)' != 'net48'"><EmbeddedResource Include="../assets/core.js" LogicalName="LocalCorrect.core.js" /><EmbeddedResource Include="../assets/en.txt" LogicalName="LocalCorrect.en.txt" /><EmbeddedResource Include="../assets/de.txt" LogicalName="LocalCorrect.de.txt" /></ItemGroup>
+<ItemGroup Condition="'$(TargetFramework)' == 'net48'"><Reference Include="System.Runtime.Serialization" /><Reference Include="System.Xml" /></ItemGroup>
+<ItemGroup Condition="'$(TargetFramework)' != 'net48'"><None Include="../assets/context-encoder.onnx" Link="models/context-encoder.onnx" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" /></ItemGroup>
 </Project>

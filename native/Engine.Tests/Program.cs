@@ -5,6 +5,8 @@ using System.IO;
 using System.Runtime.Serialization.Json;
 using System.Text;
 using System.Reflection;
+Environment.SetEnvironmentVariable("ORT_DISABLE_TELEMETRY", "1");
+Environment.SetEnvironmentVariable("ORT_RUNNING_UNIT_TESTS", "1");
 var watch = Stopwatch.StartNew();
 #if NET48
 var domain = AppDomain.CreateDomain("LocalCorrect test engine", null, new AppDomainSetup { ApplicationBase = AppDomain.CurrentDomain.BaseDirectory, ConfigurationFile = Assembly.GetExecutingAssembly().Location + ".config" });
@@ -30,12 +32,18 @@ Console.WriteLine("PASS edit validation");
 
 var quoted = engine.Correct("documetn", "en", "conservative", "From: someone\ndocumetn", 14);
 if (quoted.edits.Length != 0) throw new Exception("Selection lost quote context");
-Console.WriteLine("PASS selected text preserves full-document quote protection");
+foreach (var greeting in new[] {"Hallo", "hallo", "HALLO"}) {
+    var selectedName = engine.Correct("Rehcnung", "de", "conservative", greeting + " Rehcnung", greeting.Length + 1);
+    if (selectedName.edits.Length != 0) throw new Exception("Selection lost salutation protection");
+}
+Console.WriteLine("PASS selected text preserves full-document quote and salutation protection");
 foreach (var sample in new[] {
     new { Selection = "pleaes", Context = "pleaesant", Offset = 0 },
     new { Selection = "pleaes", Context = "xpleaes", Offset = 1 },
     new { Selection = "documetn", Context = "documetn\u0301", Offset = 0 },
     new { Selection = "documetn", Context = "documetn_", Offset = 0 },
+    new { Selection = "documetn", Context = "documetn\u200dname", Offset = 0 },
+    new { Selection = "documetn", Context = "documetn\u203fname", Offset = 0 },
     new { Selection = "documetn", Context = "1documetn", Offset = 1 },
     new { Selection = "documetn", Context = "\U00010400documetn", Offset = 2 },
     new { Selection = "\ud83d", Context = "\ud83d\ude00", Offset = 0 },
@@ -76,7 +84,10 @@ using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("p
 Console.WriteLine($"Final peak working set: {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MiB; managed memory: {GC.GetTotalMemory(false) / 1024 / 1024} MiB; elapsed: {watch.Elapsed.TotalSeconds:F1}s");
 
 #if NET48
+engine.Dispose();
 AppDomain.Unload(domain);
+#else
+engine.Dispose();
 #endif
 
 static string Serialize(Edit[] edits) {
