@@ -13,9 +13,7 @@ namespace LocalCorrect.Outlook {
         Settings settings;
         HotkeyWindow window;
         Timer timer;
-        Corrector corrector;
-        AppDomain engineDomain;
-        readonly object engineGate = new object();
+        Task<Corrector> engine;
         bool busy;
         volatile bool disconnected;
         public void OnConnection(object app, int connectMode, object addInInst, ref Array custom) {
@@ -23,13 +21,11 @@ namespace LocalCorrect.Outlook {
             window = new HotkeyWindow(() => Correct(true));
             timer = new Timer { Interval = 250 };
             timer.Tick += (s, e) => UpdateHotkey(); timer.Start();
-            // Initialize static dictionaries off the Office UI thread. No email
-            // is inspected. A first action waits for this same serialized worker.
-            Task.Run(() => { lock (engineGate) { if (!disconnected) { try { EnsureEngine(); } catch { ResetEngine(); } } } });
+            // Load the word lists off the Office UI thread (about 1-2 s). No email is read.
+            engine = Task.Run(() => Corrector.FromEmbeddedData());
         }
         public void OnDisconnection(int removeMode, ref Array custom) {
             disconnected = true; timer?.Stop(); timer?.Dispose(); window?.Dispose(); application = null;
-            Task.Run(() => { lock (engineGate) { ResetEngine(); } });
         }
         public void OnBeginShutdown(ref Array custom) { OnDisconnection(0, ref custom); }
         public void OnAddInsUpdate(ref Array custom) { }
@@ -56,7 +52,8 @@ namespace LocalCorrect.Outlook {
             doc = inspector.WordEditor;
             return doc != null && !(bool)doc.ReadOnly && (int)doc.ProtectionType == -1 && !(bool)doc.TrackRevisions;
         }
-        static string Normalized(string text) { return text.Replace('\r', '\n'); }
+        // Word marks paragraphs with \r and manual line breaks with \v; same length keeps offsets.
+        static string Normalized(string text) { return text.Replace('\r', '\n').Replace('\v', '\n'); }
         async void Correct(bool fromShortcut) {
             if (busy || disconnected) return;
             try {
@@ -66,30 +63,35 @@ namespace LocalCorrect.Outlook {
                 dynamic selection = doc.Application.Selection;
                 if (!Object.ReferenceEquals(selection.Document, doc) && !SameComObject(selection.Document, doc)) throw new InvalidOperationException("The email editor does not own the selection.");
                 dynamic target = selection.Range.Duplicate;
-                if ((int)target.Start == (int)target.End) target = doc.Content.Duplicate;
+                bool whole = (int)target.Start == (int)target.End;
+                if (whole) target = doc.Content.Duplicate;
                 if ((int)target.StoryType != 1) throw new InvalidOperationException("Select prose in the email body.");
                 int start = (int)target.Start, end = (int)target.End;
                 int selectionStart = (int)selection.Start, selectionEnd = (int)selection.End;
                 string source = (string)target.Text ?? "";
-                if (source.Length > 20000) throw new InvalidOperationException("Select at most 20,000 characters.");
                 if (source.Length != end - start) throw new InvalidOperationException("This editor's character mapping is unsupported. Select a smaller plain-text passage.");
                 string documentBefore = (string)doc.Content.Text;
-                string language = settings.Language, mode = settings.Mode;
-                bool mixedLanguage = settings.MixedLanguage;
+                int offset = start - (int)doc.Content.Start;
+                if (!whole && (InsideWord(documentBefore, offset) || InsideWord(documentBefore, offset + source.Length)))
+                    throw new InvalidOperationException("The selection cuts through a word. Select complete words.");
+                // Whole body: stop at the quoted earlier message of a reply or forward.
+                if (whole) { int cut = Mail.ReplyStart(Normalized(source)); if (cut >= 0) source = source.Substring(0, cut); }
+                if (source.Length > 50000) throw new InvalidOperationException("The text is too long. Select at most 50,000 characters.");
+                string language = settings.Language;
                 busy = true; window.Unregister();
                 // No Office COM object crosses to the worker. All editor operations stay on the Office UI thread.
-                var result = await RunEngine(source, language, mode, documentBefore, start - (int)doc.Content.Start, mixedLanguage);
+                var result = await RunEngine(Normalized(source), language);
                 if (disconnected) return;
                 dynamic currentInspector, currentDoc; IntPtr currentHwnd;
                 if (!TryTarget(out currentInspector, out currentDoc, out currentHwnd) || currentHwnd != hwnd || (fromShortcut && !HotkeyWindow.IsEditorFocused(hwnd)) || !SameComObject(doc, currentDoc) || (string)doc.Content.Text != documentBefore || (int)doc.Application.Selection.Start != selectionStart || (int)doc.Application.Selection.End != selectionEnd)
                     throw new InvalidOperationException("The email or selection changed. Nothing was applied. Run correction again.");
                 var accepted = new List<Edit>();
-                foreach (var edit in result.edits) {
-                    dynamic range = doc.Range(start + edit.offset, start + edit.offset + edit.length);
-                    if ((string)range.Text != edit.original) throw new InvalidOperationException("The editor text mapping changed. Nothing was applied.");
+                foreach (var edit in result.Edits) {
+                    dynamic range = doc.Range(start + edit.Offset, start + edit.Offset + edit.Length);
+                    if ((string)range.Text != edit.Original) throw new InvalidOperationException("The editor text mapping changed. Nothing was applied.");
                     if (!Protected(doc, range)) accepted.Add(edit);
                 }
-                if (accepted.Count == 0) { Info("No safe corrections found. Valid words, names, links, signatures and quoted text are kept."); return; }
+                if (accepted.Count == 0) { if (!fromShortcut) Info("No typos found."); return; }
                 dynamic undo = doc.Application.UndoRecord;
                 // Fail closed if this host cannot provide a single undo record.
                 if ((int)undo.CustomRecordLevel != 0) throw new InvalidOperationException("Another editor action is in progress. Try again.");
@@ -97,8 +99,8 @@ namespace LocalCorrect.Outlook {
                 bool changed = false;
                 try {
                     for (int i = accepted.Count - 1; i >= 0; i--) {
-                        var edit = accepted[i]; dynamic range = doc.Range(start + edit.offset, start + edit.offset + edit.length);
-                        range.Text = edit.replacement; changed = true;
+                        var edit = accepted[i]; dynamic range = doc.Range(start + edit.Offset, start + edit.Offset + edit.Length);
+                        range.Text = edit.Replacement; changed = true;
                     }
                 } catch {
                     undo.EndCustomRecord();
@@ -109,33 +111,16 @@ namespace LocalCorrect.Outlook {
             } catch (Exception ex) { if (!disconnected) Info("Correction stopped. " + SafeError(ex)); }
             finally { busy = false; if (!disconnected) UpdateHotkey(); }
         }
-        void EnsureEngine() {
-            if (corrector != null) return;
-            var folder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            var setup = new AppDomainSetup { ApplicationBase = folder, ConfigurationFile = Path.Combine(folder, "LocalCorrect.Outlook.dll.config") };
-            engineDomain = AppDomain.CreateDomain("LocalCorrect offline engine", null, setup);
-            corrector = (Corrector)engineDomain.CreateInstanceAndUnwrap(typeof(Corrector).Assembly.FullName, typeof(Corrector).FullName);
-        }
-        void ResetEngine() {
-            try { corrector?.Dispose(); } catch { }
-            corrector = null; var domain = engineDomain; engineDomain = null;
-            if (domain != null) { try { AppDomain.Unload(domain); } catch { } }
-        }
-        Task<Result> RunEngine(string source, string language, string mode, string context, int offset, bool mixedLanguage) {
-            // WinForms context keeps the caller's continuation on the Office UI
-            // thread. Only immutable values enter the serialized engine worker.
+        Task<Result> RunEngine(string source, string language) {
+            // WinForms context keeps the caller's continuation on the Office UI thread.
             if (System.Threading.SynchronizationContext.Current == null)
                 System.Threading.SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
-            return Task.Run(() => {
-                lock (engineGate) {
-                    try {
-                        if (disconnected) throw new OperationCanceledException();
-                        EnsureEngine();
-                        if (disconnected) throw new OperationCanceledException();
-                        return corrector.Correct(Normalized(source), language, mode, Normalized(context), offset, mixedLanguage);
-                    } catch { ResetEngine(); throw; }
-                }
-            });
+            if (engine.IsFaulted) engine = Task.Run(() => Corrector.FromEmbeddedData()); // retry a failed load
+            var loading = engine;
+            return Task.Run(() => loading.Result.Correct(source, language));
+        }
+        static bool InsideWord(string text, int position) {
+            return position > 0 && position < text.Length && char.IsLetterOrDigit(text[position - 1]) && char.IsLetterOrDigit(text[position]);
         }
         static bool SameComObject(object a, object b) {
             IntPtr x = IntPtr.Zero, y = IntPtr.Zero;
@@ -156,9 +141,8 @@ namespace LocalCorrect.Outlook {
         }
         static bool Overlaps(dynamic a, dynamic b) { return (int)a.Start < (int)b.End && (int)a.End > (int)b.Start; }
         static string SafeError(Exception ex) {
-            // Do not display JS exceptions, which can contain fragments of private input.
             if (ex is InvalidOperationException || ex is ArgumentException) return ex.Message;
-            return "The editor or offline engine could not complete this operation. Try a smaller selection. Review the message before sending.";
+            return "The editor could not complete this operation. Try a smaller selection. Review the message before sending.";
         }
         static void Info(string text) { MessageBox.Show(text, "LocalCorrect", MessageBoxButtons.OK, MessageBoxIcon.Information); }
     }

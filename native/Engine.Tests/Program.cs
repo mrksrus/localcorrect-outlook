@@ -1,127 +1,48 @@
+// Runs every case recorded from the browser engine (parity.tsv) through the C# port and
+// requires identical language, output and edits. Also checks load time and speed.
 using System;
 using System.Diagnostics;
-using LocalCorrect;
 using System.IO;
-using System.Runtime.Serialization.Json;
+using System.Linq;
 using System.Text;
-using System.Reflection;
-Environment.SetEnvironmentVariable("ORT_DISABLE_TELEMETRY", "1");
-Environment.SetEnvironmentVariable("ORT_RUNNING_UNIT_TESTS", "1");
-if (args.Length != 0) {
-    if (args.Length != 2 || args[0] != "--expected-bitness" || (args[1] != "x86" && args[1] != "x64") || Environment.Is64BitProcess != (args[1] == "x64")) throw new Exception("Client process bitness does not match the required test target.");
-    Console.WriteLine("PASS actual client process bitness " + args[1]);
-}
-var watch = Stopwatch.StartNew();
-#if NET48
-var domain = AppDomain.CreateDomain("LocalCorrect test engine", null, new AppDomainSetup { ApplicationBase = AppDomain.CurrentDomain.BaseDirectory, ConfigurationFile = Assembly.GetExecutingAssembly().Location + ".config" });
-var engine = (Corrector)domain.CreateInstanceAndUnwrap(typeof(Corrector).Assembly.FullName, typeof(Corrector).FullName);
-#else
-var engine = new Corrector();
-#endif
-Console.WriteLine($"Engine initialized in {watch.Elapsed.TotalSeconds:F1}s");
-void Check(string input, string language, string expected) {
-    var result = engine.Correct(input, language, "conservative");
-    if (result.text != expected) throw new Exception($"Unexpected result for synthetic {language} fixture: {result.text}");
-    Console.WriteLine($"PASS {language}: {result.edits.Length} edits in {watch.Elapsed.TotalSeconds:F1}s");
-}
-Check("please teh documetn", "en", "please the document");
-Check("please keep the mesage", "en", "please keep the mesage");
-Check("Bitte senden Sie die Rehcnung.", "de", "Bitte senden Sie die Rechnung.");
-Check("https://example.com/seperate a@documetn.com `seperate`\n-- \nseperate", "en", "https://example.com/seperate a@documetn.com `seperate`\n-- \nseperate");
-Check("📧 please documetn this", "en", "📧 please document this");
-foreach (var sample in new[] {
-    new { Text = "please teh documetn", Language = "en", Expected = "please the document" },
-    new { Text = "Bitte senden Sie die Rehcnung.", Language = "de", Expected = "Bitte senden Sie die Rechnung." },
-}) {
-    var legacy = engine.Correct(sample.Text, sample.Language, "conservative");
-    var explicitMixed = engine.Correct(sample.Text, sample.Language, "conservative", mixedLanguage: true);
-    if (legacy.text != explicitMixed.text || Serialize(legacy.edits) != Serialize(explicitMixed.edits) || legacy.skipped != explicitMixed.skipped) throw new Exception("Explicit mixed scope changed legacy correction");
-    if (engine.Correct(sample.Text, sample.Language, "conservative", mixedLanguage: false).text != sample.Expected) throw new Exception("Selected-only scope lost selected-language spelling corrections");
-}
-Console.WriteLine("PASS legacy mixed scope and selected-language spelling in both languages");
-foreach (var sample in new[] {
-    new { Text = "Please unterstand the instructions.", Language = "en", Expected = "Please understand the instructions." },
-    new { Text = "halloo zusammen", Language = "de", Expected = "hallo zusammen" },
-}) foreach (var mode in new[] { "conservative", "balanced" }) {
-    if (engine.Correct(sample.Text, sample.Language, mode).text != sample.Text || engine.Correct(sample.Text, sample.Language, mode, mixedLanguage: true).text != sample.Text) throw new Exception("Legacy mixed vocabulary protection changed");
-    if (engine.Correct(sample.Text, sample.Language, mode, mixedLanguage: false).text != sample.Expected) throw new Exception("Selected-language scope did not reach the lexical policy");
-    if (engine.Correct(sample.Text, sample.Language, mode).text != sample.Text) throw new Exception("Selected-language scope leaked into the next legacy request");
-}
-Console.WriteLine("PASS selected-language vocabulary differs from mixed protection in both languages and modes");
-bool rejected = false;
-try { Corrector.Validate("abc", new Result { edits = new[] { new Edit { offset = 2, length = 4, original = "x", replacement = "y" } } }); } catch (InvalidOperationException) { rejected = true; }
-if (!rejected) throw new Exception("Out-of-bounds edit was accepted");
-Console.WriteLine("PASS edit validation");
+using LocalCorrect;
 
-foreach (var mixedLanguage in new[] { true, false }) {
-    var quoted = engine.Correct("documetn", "en", "conservative", "From: someone\ndocumetn", 14, mixedLanguage);
-    if (quoted.edits.Length != 0) throw new Exception("Selection lost quote context");
-    foreach (var greeting in new[] {"Hallo", "hallo", "HALLO"}) {
-        var selectedName = engine.Correct("Rehcnung", "de", "conservative", greeting + " Rehcnung", greeting.Length + 1, mixedLanguage);
-        if (selectedName.edits.Length != 0) throw new Exception("Selection lost salutation protection");
+static class Program {
+    static string Decode(string s) { return Encoding.UTF8.GetString(Convert.FromBase64String(s)); }
+    static int Main() {
+        var clock = Stopwatch.StartNew();
+        var corrector = Corrector.FromEmbeddedData();
+        Console.WriteLine($"load {clock.ElapsedMilliseconds} ms");
+        int failed = 0, total = 0;
+        foreach (var line in File.ReadAllLines(Path.Combine(AppContext.BaseDirectory, "parity.tsv"))) {
+            if (line.Length == 0) continue;
+            var f = line.Split('\t');
+            string input = Decode(f[1]);
+            var r = corrector.Correct(input, f[0]);
+            string edits = string.Join(",", r.Edits.Select(e => $"{e.Offset}:{e.Length}:{Convert.ToBase64String(Encoding.UTF8.GetBytes(e.Replacement))}"));
+            total++;
+            if (r.Language != f[2] || r.Text != Decode(f[3]) || edits != (f.Length > 4 ? f[4] : "")) {
+                if (++failed <= 10) Console.WriteLine($"MISMATCH [{f[0]}] {input}\n  js: {Decode(f[3])} ({f[2]})\n  c#: {r.Text} ({r.Language})");
+            }
+        }
+        Console.WriteLine($"parity {total - failed}/{total}");
+        foreach (var (text, want) in new[] {
+            ("Hi,\nteh draft.\n\nFrom: Anna <a@b.c>\nSent: Monday\nTo: me\nSubject: x\n\nteh old text", 16),
+            ("Hallo,\nDanke.\n\nVon: Anna\nGesendet: Montag\nAn: ich\n\nalt", 15),
+            ("ok\n-----Original Message-----\nold", 3),
+            ("ok\nAm 12.11.2026 um 10:00 schrieb Anna Muster <a@b.c>:\n> alt", 3),
+            ("ok\nOn Mon, Nov 12, 2026 at 10:00 AM Anna wrote:\n> old", 3),
+            ("From now on we meet weekly.\nSent from my phone", -1),
+            ("No reply here, just prose.", -1),
+        }) {
+            total++;
+            int got = Mail.ReplyStart(text);
+            if (got != want) { failed++; Console.WriteLine($"REPLY {got} != {want}: {text}"); }
+        }
+        var email = string.Concat(Enumerable.Repeat("Hallo zusammen, ich habe die Unterlagen gestren bekomen und schike sie morgne weiter. ", 80));
+        clock.Restart(); corrector.Correct(email); long ms = clock.ElapsedMilliseconds;
+        Console.WriteLine($"1,000-word email {ms} ms");
+        if (ms > 2000) { Console.WriteLine("FAIL too slow"); failed++; }
+        return failed == 0 ? 0 : 1;
     }
-}
-Console.WriteLine("PASS selected text preserves full-document quote and salutation protection");
-foreach (var sample in new[] {
-    new { Selection = "pleaes", Context = "pleaesant", Offset = 0 },
-    new { Selection = "pleaes", Context = "xpleaes", Offset = 1 },
-    new { Selection = "documetn", Context = "documetn\u0301", Offset = 0 },
-    new { Selection = "documetn", Context = "documetn_", Offset = 0 },
-    new { Selection = "documetn", Context = "documetn\u200dname", Offset = 0 },
-    new { Selection = "documetn", Context = "documetn\u203fname", Offset = 0 },
-    new { Selection = "documetn", Context = "1documetn", Offset = 1 },
-    new { Selection = "documetn", Context = "\U00010400documetn", Offset = 2 },
-    new { Selection = "\ud83d", Context = "\ud83d\ude00", Offset = 0 },
-}) {
-    bool boundaryRejected = false;
-    try { engine.Correct(sample.Selection, "en", "conservative", sample.Context, sample.Offset); }
-    catch (ArgumentException) { boundaryRejected = true; }
-    if (!boundaryRejected) throw new Exception("Partial-token selection was accepted");
-}
-if (engine.Correct("documetn", "en", "conservative", "a documetn.", 2).text != "document") throw new Exception("Whole-token selection rejected");
-Console.WriteLine("PASS token and surrogate selection boundaries");
-
-Check("please teh document.\r-- \rseperate seperate", "en", "please the document.\r-- \rseperate seperate");
-
-Console.WriteLine($"Peak working set: {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MiB; managed memory: {GC.GetTotalMemory(false) / 1024 / 1024} MiB; elapsed: {watch.Elapsed.TotalSeconds:F1}s");
-
-using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("parity.json"))
-{
-    var fixtures = (Fixture[])new DataContractJsonSerializer(typeof(Fixture[])).ReadObject(stream);
-    int count = 0;
-    foreach (var fixture in fixtures) {
-        var result = engine.Correct(fixture.text, fixture.language, fixture.mode, mixedLanguage: fixture.mixedLanguage ?? true);
-        var expected = fixture.expected;
-        if (result.text != expected.text || Serialize(result.edits) != Serialize(expected.edits) || result.skipped != expected.skipped) throw new Exception("Jint/JavaScript parity mismatch at case " + count);
-        count++;
-    }
-    Console.WriteLine($"PASS {count} Jint/JavaScript parity cases");
-    foreach (var language in new[] { "en", "de" }) {
-        Fixture longFixture = null;
-        foreach (var f in fixtures) if (f.language == language && f.text.Length >= 4500 && f.text.Split((char[])null, StringSplitOptions.RemoveEmptyEntries).Length >= 900) { longFixture = f; break; }
-        if (longFixture == null) throw new Exception("Missing long-email performance fixture");
-        var samples = new double[3];
-        for (int i = 0; i < samples.Length; i++) { var latency = Stopwatch.StartNew(); engine.Correct(longFixture.text, language, "conservative"); samples[i] = latency.Elapsed.TotalMilliseconds; }
-        Console.WriteLine($"Warm ~1000-word {language} engine timings, ms: {string.Join(", ", Array.ConvertAll(samples, value => value.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)))}");
-    }
-
-}
-Console.WriteLine($"Final peak working set: {Process.GetCurrentProcess().PeakWorkingSet64 / 1024 / 1024} MiB; managed memory: {GC.GetTotalMemory(false) / 1024 / 1024} MiB; elapsed: {watch.Elapsed.TotalSeconds:F1}s");
-
-#if NET48
-engine.Dispose();
-AppDomain.Unload(domain);
-#else
-engine.Dispose();
-#endif
-
-static string Serialize(Edit[] edits) {
-    using (var stream = new MemoryStream()) { new DataContractJsonSerializer(typeof(Edit[])).WriteObject(stream, edits); return Encoding.UTF8.GetString(stream.ToArray()); }
-}
-public sealed class Fixture {
-    public string text { get; set; }
-    public string language { get; set; }
-    public string mode { get; set; }
-    public bool? mixedLanguage { get; set; }
-    public Result expected { get; set; }
 }

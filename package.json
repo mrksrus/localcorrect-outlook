@@ -1,22 +1,12 @@
 {
   "name": "localcorrect-outlook",
-  "version": "1.0.0-rc.6",
+  "version": "2.0.0-rc.1",
   "private": true,
   "type": "module",
-  "description": "Offline English/German correction for classic Outlook desktop, with a legacy web prototype",
+  "description": "Offline English/German typo correction for classic Outlook on Windows",
   "license": "GPL-3.0-only",
-  "engines": {
-    "node": ">=22"
-  },
   "scripts": {
-    "test": "node --test test/*.test.js",
-    "build": "node scripts/build.mjs",
-    "test:integration": "node --test test/integration.test.js",
-    "validate": "node scripts/validate.mjs",
-    "build:native": "node scripts/build-native.mjs"
-  },
-  "devDependencies": {
-    "esbuild": "0.25.12",
-    "linkedom": "0.18.12"
+    "build": "node scripts/build-native.mjs",
+    "sync-engine": "node scripts/sync-engine.mjs"
   }
 }

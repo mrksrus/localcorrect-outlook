@@ -1,24 +1,13 @@
 # Privacy
 
-## Native desktop candidate
+LocalCorrect runs entirely inside Outlook on your computer. It makes no network connections:
+no correction service, telemetry, analytics, updates or downloads.
 
-Native RC5 uses a .NET Framework 4.8 COM proxy and a bundled self-contained .NET 10 x64 helper. Both 32-bit and 64-bit Outlook use that separate helper on 64-bit Windows 10/11. The helper contains the EN/DE engine, dictionaries, Jint, ONNX Runtime 1.31.1 and the local contextual model. Installed correction uses bundled files, with no HTTP server, remote correction call or model download.
+It reads mail text only when you press the shortcut or the ribbon button, and only the
+selection, or the body above the quoted earlier message. The text is corrected in memory and
+the changed words are written back into the editor. Nothing is logged or stored. Settings
+(text language and shortcut) are saved in `HKEY_CURRENT_USER\Software\LocalCorrect\Outlook`.
 
-At add-in load, the helper initializes static resources without reading email. Only an explicit correction action reads the selected text or editable body and its document context for safety checks. The proxy passes these strings through inherited standard-input/output streams using bounded frames. The helper returns edits and corrected text through the same local connection. There is no listening socket. Neither process sends/saves mail or logs document text. Helper exceptions are not printed, and the proxy discards helper standard error without collecting it. Strings remain in process memory during the operation; releasing references is not secure memory erasure.
-
-ONNX Runtime 1.31.1's Windows NuGet binary uses legacy ETW telemetry. The proxy sets both `ORT_DISABLE_TELEMETRY=1` and `ORT_RUNNING_UNIT_TESTS=1` before creating the helper; the helper repeats them before initialization and calls `DisableTelemetryEvents`. The first flag disables the 1DS backend where supported. The second uses the pinned Windows version's internal guard to skip ETW provider registration before startup events. This source- and binary-specific behavior must be rechecked for dependency updates. Actual Windows ETW tracing on the final candidate remains outstanding; the API call alone is not evidence of complete startup suppression. See the upstream [privacy documentation](https://github.com/microsoft/onnxruntime/blob/v1.31.1/docs/Privacy.md), [Windows constructor](https://github.com/microsoft/onnxruntime/blob/v1.31.1/onnxruntime/core/platform/windows/telemetry.cc#L270-L284) and [environment guard](https://github.com/microsoft/onnxruntime/blob/v1.31.1/onnxruntime/core/platform/telemetry_environment.h#L268-L284).
-
-Settings store only language, correction mode and shortcut in HKCU. No keyboard hook is installed. The hotkey is registered while an eligible popped-out compose window is active. Outlook and Windows have their own draft synchronization, diagnostics and process-memory behavior; these controls describe LocalCorrect and the pinned helper dependency, not every host component.
-
-Word range edits are bounded to validated original words, with stale-document/selection rejection and a custom Undo record. Known signature bookmarks, quoted text, links, fields, content controls and code-like fonts are protected; unusual unmarked content still needs user review. The installer writes LocalCorrect files and HKCU keys, respects existing Office policy and does not require administrator rights. Build-time dependency/source downloads contain no user mail. Raw training learner text and private correspondence are excluded from the published source bundle. Actual Windows/Outlook acceptance is outstanding; this remains an experimental prerelease. See [native/README.md](native/README.md).
-
-## Legacy web prototype
-
-
-Correction runs in the pane using bundled local code/dictionaries. Only the composing item's body and explicitly selected fragment are read through Office.js for safety checks. No mailbox enumeration, recipients, attachments, history, identity tokens or send/save API is used. Replies/forwards are refused. The manifest requests **ReadItem**, not ReadWriteItem/ReadWriteMailbox; shipping runtime has no Office setters.
-
-No telemetry, analytics, remote correction service, account registration, cookies, localStorage, IndexedDB, service worker or draft logging. Snapshots and selected-text output remain in JavaScript memory; Clear output/reload/close discards the result, not secure memory erasure. Body HTML is never rendered or displayed; only selected corrected plain text appears in a read-only field. Output is a snapshot, not a live draft view. Outlook itself may save/synchronize drafts independently.
-
-**Explicit Copy** writes only the reviewed output to the OS clipboard. No automatic Copy, clipboard reads or persistence. OS clipboard history/device sync and other clipboard consumers may retain/expose copied text outside this add-in. Clear output does not clear the OS clipboard; review OS settings and avoid copying confidential material if inappropriate. Clipboard-denied fallback is manual select/copy; rich formatting is lost with plain-text Copy.
-
-Static assets/dictionaries load from the configured origin without draft text in requests; Microsoft's Office.js loads from its required CDN. Host/CDN operators see ordinary request metadata such as IP/user agent, not draft text emitted by our code. Office/Outlook/Microsoft scripts have their own network behavior; **the entire runtime is not offline**. Deploy without analytics, injected scripts or content-bearing URLs. The local HTTPS helper logs no requests and makes no OS trust changes. Never put real mail in demos or test fixtures.
+The shortcut is registered with Windows only while a compose window's body has focus; there is
+no keyboard hook and typing is never monitored. LocalCorrect never sends or saves mail. Outlook
+itself saves and synchronises drafts as usual.

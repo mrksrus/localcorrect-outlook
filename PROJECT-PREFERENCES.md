@@ -18,9 +18,13 @@
 
 - LC-10, 2026-11-06. The user requests explicit text-language selection in the correction engine and product UI. English/German choice must reach the correction operation; interface language remains independent. Preserve local processing and the preference for abstention over unwanted edits.
 
+- LC-11, 2026-11-15. **Supersedes LC-05, LC-06, LC-07 and LC-09 where they conflict.** The 1.0.0 RCs almost never corrected anything; the user rejected that base. Clear typos must actually be fixed; abstain only for names, links, code, numbers, quotes, words valid in the other language and very short words. The neural model, helper process and calibration policy are removed. Version 2 uses the browser version 2 engine, ported to C# and checked against it case by case.
+- LC-12, 2026-11-15. Cover both English and German: detect the language per text by default, with a setting to force English or German (keeps LC-10).
+- LC-13, 2026-11-15. The old drafts were deleted on request; 1.0.0-rc.x stay as tags and releases. The legacy Outlook-on-the-web prototype is removed from version 2 (it remains in tag v1.0.0-rc.1).
+
 ## Observed implementation
 
-The fixed browser RC5 and native RC4 engines use compiled spelling priors, bilingual validity and literal/name protection. Browser RC6 and native RC5 retain that static stage and add a 47.25 MB pretrained BERT Mini encoder fine-tuned for sparse contextual edits. The calibrated policy enables 13 actions after model/metadata identity and original-text protection checks. Training and calibration roles are separate from the first frozen evaluations. The observed gain is limited partial correction; broad grammar coverage and population precision are not established. Both saved modes share the same policy. No runtime compiler reads test gold.
+Version 2: `native/Engine/Corrector.cs` (C# port of the browser engine, compiled into the add-in DLL with the word lists), `native/AddIn` (COM add-in, ribbon, shortcut, Word edits in one Undo record, whole-body correction stops at the quoted reply), `native/Installer` (per-user, no VC++ runtime needed). `scripts/sync-engine.mjs` records 975 browser-engine outputs that the C# tests must match exactly.
 
 ## Open decisions
 

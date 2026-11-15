@@ -1,30 +1,15 @@
-# Security policy
+# Security
 
-## Native desktop candidate
+Report vulnerabilities through GitHub's private vulnerability reporting for this repository.
+Do not include real mail.
 
-Native RC5's .NET Framework 4.8 COM proxy supports both Outlook bitnesses on 64-bit Windows 10/11. It starts only the fixed bundled x64 helper, which contains .NET 10, Jint, ONNX Runtime 1.31.1 and local data/model files. No Office COM object crosses into the helper. Jint CLR interop is disabled. The helper model is checked against the bundled core's expected byte length and SHA-256 before ONNX Runtime loads it; external model data are not accepted.
+LocalCorrect is a per-user COM add-in (.NET Framework 4.8) with no network access and no
+external processes. Edits are limited to whole words whose current text still matches what
+was read; if the mail or the selection changed meanwhile, nothing is applied. All edits are
+one Word Undo record, and a failure part-way undoes the edits made so far. Hyperlinks, fields,
+content controls, inline objects, the automatic signature and code-font text are not edited.
 
-The proxy and helper exchange versioned UTF-8 JSON through inherited standard-input/output streams. Frames are bounded to 8 MiB, correction selections to 20,000 UTF-16 code units and document context to 1,000,000. There is no HTTP listener, correction-service request or runtime model download. Malformed frames, invalid output, helper crashes and timeouts fail without applying edits. Failed helpers are stopped, and a later user invocation may restart one. Disposal and parent-exit monitoring provide cleanup.
-
-ONNX Runtime opt-outs are supplied before helper process creation and repeated before initialization. Both `ORT_DISABLE_TELEMETRY=1` and the pinned version's internal `ORT_RUNNING_UNIT_TESTS=1` guard are needed to cover its 1DS and Windows ETW paths; `DisableTelemetryEvents` is also called. Recheck the exact backend and initialization order on dependency updates. Windows ETW tracing of the final artifact remains unverified. See [PRIVACY.md](PRIVACY.md) for the source evidence and limits. Runtime diagnostics/minidumps requested through the configured .NET environment are disabled for the helper; this is not a guarantee about all Windows or Office diagnostics.
-
-The helper initializes static resources at add-in load without inspecting email. It reads document text only for an explicit correction, never sends/saves mail and does not log document text. Helper failures do not print exceptions; the parent discards stderr. Settings store only language, mode and shortcut in HKCU. The hotkey uses no keyboard hook and is registered only for an eligible popped-out compose window.
-
-The proxy verifies ordered, non-overlapping original edit spans and reconstructs the returned output before Word edits. Stale-document/selection checks and a custom Undo record protect the application step. Known signature bookmarks, quoted text, links, fields, content controls and code-like fonts are excluded; unusual unmarked content still needs user review. The installer writes LocalCorrect files and HKCU keys, refuses conflicting registrations, respects existing Office policy and does not require administrator rights. The installer checks for Microsoft's separately installed x64 Visual C++ runtime before changing files or registry keys. It does not redistribute, download or install the VC runtime; its official prerequisite link is documented in [native/README.md](native/README.md).
-
-Required source/runtime/CI checks remain separate from physical Office acceptance. Final RC5 quality, benchmarks and Windows CI results are pending. Actual Outlook 2019 x86/x64 loading, formatting, Undo and installation acceptance remain unverified; an experimental prerelease must disclose that limit. See [native/README.md](native/README.md).
-
-## Legacy web prototype
-
-
-Release candidate. Report vulnerabilities privately through the repository host's private reporting facility when available; otherwise request a private channel without mail, tokens or identifying information. Use synthetic fixtures only.
-
-Threat model: unintended draft changes, stale callbacks, unsupported hosts, unsafe quote/signature/HTML selection and application-origin disclosure. **The legacy web prototype is output-only.** No Office setters, insertion opt-in, send/save or background writes exist. Office's non-atomic selection API cannot safely bind a read to insertion; more preflight reads/Undo do not solve its late target-switch race. This implementation avoids that risk by leaving all draft paste actions to the user.
-
-Stable body/selection snapshots are checked before publishing output; concurrent operations, changed item, clear/close and observed stale reads cancel it. A late selection change after the final callback may still yield a stale output snapshot, but cannot modify the draft. Review before copying and deliberately paste into the intended location. Explicit clipboard Copy can expose text to OS history/device sync; no automatic copy or clipboard read is performed. Clear output is not clipboard clearing or draft Undo.
-
-Email markup is parsed in inert template contents, never attached to live DOM or shown as HTML. Only selected plain text is displayed in a read-only field; results/errors are not treated as markup. Unsupported fragment markup/attributes are refused. Logical P/DIV/BR separators preserve line boundaries, and edits cannot cross synthetic separators/text nodes. Inline formatting remains in the detached intermediate structure but plain-text Copy loses it. Contract validation rejects invalid/overlapping edits. Known protected regions, links and ambiguous selections are refused; manual unmarked signatures/proper names are not universally identifiable. New HTML mail/web only.
-
-A malicious host, tampered core/dictionary/dependency or compromised Office runtime is outside this boundary. Use HTTPS, verify ZIP hashes/provenance, review/pin shared core, restrict asset-host writes, retain CSP and avoid injected scripts. Office.js is an externally maintained CDN dependency without fixed SRI; full offline execution and end-to-end isolation are not claimed. The loopback HTTPS helper accepts supplied cert/key; never place keys in hosted assets or release archives, and never bypass browser trust for real use.
-
-Release gates: exact reviewed clean core pin, tests/artifact reproducibility, complete legal notices, official manifest validation where approved, and owner synthetic sideload/CSP/clipboard/network checks on intended mailbox. No live Outlook installation has been verified. Native cross-compilation is separate from Windows/Office acceptance. See README for deliberate RC scope and pending acceptance.
+The installer writes only to `%LOCALAPPDATA%\LocalCorrect\Outlook` and LocalCorrect's own HKCU
+keys, refuses to overwrite a conflicting registration, and on removal deletes only files whose
+recorded hash is unchanged. It needs no administrator rights and changes no Office policy.
+The executable is unsigned.
