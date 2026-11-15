@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><TargetFramework>net48</TargetFramework><AssemblyName>LocalCorrect.Outlook</AssemblyName><GenerateAssemblyInfo>true</GenerateAssemblyInfo></PropertyGroup>
+<!-- The engine is compiled into the add-in: Outlook's COM loader then needs no second assembly. -->
+<ItemGroup>
+  <Compile Include="../Engine/*.cs" LinkBase="Engine" />
+  <EmbeddedResource Include="../Engine/data/en.lex" LogicalName="LocalCorrect.en.lex" />
+  <EmbeddedResource Include="../Engine/data/de.lex" LogicalName="LocalCorrect.de.lex" />
+  <Reference Include="System.Windows.Forms" /><Reference Include="System.Drawing" /><Reference Include="Microsoft.CSharp" />
+</ItemGroup>
+</Project>

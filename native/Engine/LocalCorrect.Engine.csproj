@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFrameworks>net48;net10.0</TargetFrameworks><AssemblyName>LocalCorrect.Engine</AssemblyName></PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="data/en.lex" LogicalName="LocalCorrect.en.lex" />
+    <EmbeddedResource Include="data/de.lex" LogicalName="LocalCorrect.de.lex" />
+  </ItemGroup>
+</Project>

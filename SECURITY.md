@@ -1,13 +1,15 @@
-# Security policy
+# Security
 
-Release candidate. Report vulnerabilities privately through the repository host's private reporting facility when available; otherwise request a private channel without mail, tokens or identifying information. Use synthetic fixtures only.
+Report vulnerabilities through GitHub's private vulnerability reporting for this repository.
+Do not include real mail.
 
-Threat model: unintended draft changes, stale callbacks, unsupported hosts, unsafe quote/signature/HTML selection and application-origin disclosure. **Output-only is the sole shipping mode.** No Office setters, insertion opt-in, send/save or background writes exist. Office's non-atomic selection API cannot safely bind a read to insertion; more preflight reads/Undo do not solve its late target-switch race. This implementation avoids that risk by leaving all draft paste actions to the user.
+LocalCorrect is a per-user COM add-in (.NET Framework 4.8) with no network access and no
+external processes. Edits are limited to whole words whose current text still matches what
+was read; if the mail or the selection changed meanwhile, nothing is applied. All edits are
+one Word Undo record, and a failure part-way undoes the edits made so far. Hyperlinks, fields,
+content controls, inline objects, the automatic signature and code-font text are not edited.
 
-Stable body/selection snapshots are checked before publishing output; concurrent operations, changed item, clear/close and observed stale reads cancel it. A late selection change after the final callback may still yield a stale output snapshot, but cannot modify the draft. Review before copying and deliberately paste into the intended location. Explicit clipboard Copy can expose text to OS history/device sync; no automatic copy or clipboard read is performed. Clear output is not clipboard clearing or draft Undo.
-
-Email markup is parsed in inert template contents, never attached to live DOM or shown as HTML. Only selected plain text is displayed in a read-only field; results/errors are not treated as markup. Unsupported fragment markup/attributes are refused. Logical P/DIV/BR separators preserve line boundaries, and edits cannot cross synthetic separators/text nodes. Inline formatting remains in the detached intermediate structure but plain-text Copy loses it. Contract validation rejects invalid/overlapping edits. Known protected regions, links and ambiguous selections are refused; manual unmarked signatures/proper names are not universally identifiable. New HTML mail/web only.
-
-A malicious host, tampered core/dictionary/dependency or compromised Office runtime is outside this boundary. Use HTTPS, verify ZIP hashes/provenance, review/pin shared core, restrict asset-host writes, retain CSP and avoid injected scripts. Office.js is an externally maintained CDN dependency without fixed SRI; full offline execution and end-to-end isolation are not claimed. The loopback HTTPS helper accepts supplied cert/key; never place keys in hosted assets or release archives, and never bypass browser trust for real use.
-
-Release gates: exact reviewed clean core pin, tests/artifact reproducibility, complete legal notices, official manifest validation where approved, and owner synthetic sideload/CSP/clipboard/network checks on intended mailbox. No live Outlook installation or native Windows build has been verified. See README for deliberate RC scope and pending acceptance.
+The installer writes only to `%LOCALAPPDATA%\LocalCorrect\Outlook` and LocalCorrect's own HKCU
+keys, refuses to overwrite a conflicting registration, and on removal deletes only files whose
+recorded hash is unchanged. It needs no administrator rights and changes no Office policy.
+The executable is unsigned.

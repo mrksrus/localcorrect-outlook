@@ -5,3 +5,9 @@ coverage/
 .core-checkout/
 *.log
 __pycache__/
+work/
+native/**/bin/
+native/**/obj/
+native/assets/*
+!native/assets/.gitkeep
+test-results/

@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><TargetFramework>net48</TargetFramework><OutputType>WinExe</OutputType><AssemblyName>LocalCorrect-Outlook-Setup</AssemblyName><ApplicationManifest>app.manifest</ApplicationManifest><PlatformTarget>AnyCPU</PlatformTarget><Prefer32Bit>false</Prefer32Bit></PropertyGroup>
+<ItemGroup><Reference Include="System.Windows.Forms" /><Reference Include="System.Drawing" /><Reference Include="System.IO.Compression" /><Reference Include="System.IO.Compression.FileSystem" /><EmbeddedResource Include="../assets/payload.zip" LogicalName="LocalCorrect.payload.zip" /></ItemGroup>
+</Project>

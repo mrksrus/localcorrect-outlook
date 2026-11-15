@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFrameworks>net48;net10.0</TargetFrameworks><OutputType>Exe</OutputType></PropertyGroup>
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'"><PlatformTarget>AnyCPU</PlatformTarget><Prefer32Bit>false</Prefer32Bit></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Engine/LocalCorrect.Engine.csproj" />
+    <None Include="parity.tsv" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

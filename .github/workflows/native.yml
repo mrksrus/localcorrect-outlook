@@ -1,0 +1,44 @@
+name: Outlook add-in
+on: [pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  engine-in-sync:
+    # The C# engine's word lists and expected outputs must come from the pinned browser release.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Read pinned browser engine
+        id: pin
+        run: node -e 'const p=require("./engine-source.json"); if(!/^[a-f0-9]{40}$/.test(p.commit)) throw new Error("bad pin"); console.log(`repository=${p.repository}\ncommit=${p.commit}`)' >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ steps.pin.outputs.repository }}
+          ref: ${{ steps.pin.outputs.commit }}
+          path: .browser
+          persist-credentials: false
+      - run: node scripts/sync-engine.mjs .browser
+      - run: git diff --exit-code -- native/Engine/data native/Engine.Tests/parity.tsv
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.403'
+      # Runs engine parity and installer tests under .NET 10 and .NET Framework 4.8, then packages.
+      - run: node scripts/build-native.mjs --locked
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: localcorrect-outlook
+          path: dist/*
+# Hosted runners have no Outlook: this is build and engine testing, not Outlook acceptance.
