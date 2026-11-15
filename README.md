@@ -1,5 +1,12 @@
 # LocalCorrect Outlook — 1.0.0-rc.1
 
+> **Status, 2026-11-15:** not yet tested in a real Outlook. This add-in still uses the old
+> browser engine (`packages/core` at the commit pinned in `core-source.json`). That engine left
+> most typos uncorrected and was replaced by a from-scratch rewrite, version 2 of
+> [localcorrect-browser](https://github.com/mrksrus/localcorrect-browser). The rewrite has no
+> `packages/core`, so build against the pinned commit until this add-in is moved to version 2.
+> The native Outlook 2019 EXE add-in lives on the `feat/native-*` branches (draft PRs).
+
 GPL-3.0-only. **Output-only release candidate**, not a final release or a verified live Outlook installation. English/German spelling correction runs locally using the actual portable `@localcorrect/core` from the companion browser repository. No grammar checker, LLM, native Windows installer or whole-email in-place correction is supplied.
 
 ## Supported scope and use
