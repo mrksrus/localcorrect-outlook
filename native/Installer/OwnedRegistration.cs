@@ -12,7 +12,7 @@ namespace LocalCorrect.Setup {
         internal const string Clsid = "{708F01D3-893E-43D0-8215-61722BC46F23}";
         internal const string ProgId = "LocalCorrect.Outlook.AddIn";
         internal const string Owner = "LocalCorrect.Outlook/708F01D3-893E-43D0-8215-61722BC46F23";
-        internal const string ProductVersion = "2.0.0-rc.3";
+        internal const string ProductVersion = "2.0.0-rc.4";
         internal const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\LocalCorrect.Outlook";
         internal const string OwnerValue = "LocalCorrectOwner";
         internal interface IHive {
@@ -77,16 +77,34 @@ namespace LocalCorrect.Setup {
                 foreach (string key in dead) keys.Remove(key);
             }
         }
-        internal static void Replace(IReadOnlyList<HiveSlot> slots, InstallFacts facts) {
+        internal static void Replace(IReadOnlyList<HiveSlot> slots, InstallFacts facts) { Replace(slots, facts, false); }
+        // replaceExisting is the user's "remove the installed version and continue".
+        // It deletes only LocalCorrect's own registration paths, then writes them again.
+        internal static void Replace(IReadOnlyList<HiveSlot> slots, InstallFacts facts, bool replaceExisting) {
             var conflicts = new List<Conflict>();
             foreach (var slot in slots) conflicts.AddRange(FindConflicts(slot.Hive, slot.ViewName, slot.IncludeWowNode));
-            if (conflicts.Count != 0) throw new InvalidOperationException(FormatConflict(conflicts));
-            // Remove every owned key first. On 64-bit Windows the literal
+            if (conflicts.Count != 0 && !replaceExisting) throw new InvalidOperationException(FormatConflict(conflicts));
+            // Remove keys before writing. On 64-bit Windows the literal
             // Wow6432Node class key is the 32-bit view, so deleting it after
             // the 32-bit view was rewritten would erase the new registration.
             foreach (var slot in slots) RemoveOwned(slot.Hive, slot.IncludeWowNode);
+            if (replaceExisting) foreach (var slot in slots) RemoveRegistration(slot.Hive, slot.IncludeWowNode);
             foreach (var slot in slots) Write(slot.Hive, facts);
             foreach (var slot in slots) ClearResiliency(slot.Hive);
+        }
+        internal static string FormatReinstallPrompt(IReadOnlyList<Conflict> conflicts, bool folderUnverified) {
+            var text = new StringBuilder("LocalCorrect is already installed for this Windows user.\n\nRemove the installed version and continue?");
+            foreach (Conflict conflict in conflicts) {
+                text.Append("\n\nHKCU ");
+                text.Append(conflict.ViewName);
+                text.Append(" ");
+                text.Append(conflict.Path);
+            }
+            if (folderUnverified) text.Append("\n\nThe installation folder could not be verified. It will be renamed and kept, not deleted.");
+            return text.ToString();
+        }
+        internal static void RemoveRegistration(IHive hive, bool includeWowNode) {
+            foreach (string path in Paths(includeWowNode)) if (hive.Exists(path)) hive.DeleteTree(path);
         }
         // Outlook records a startup failure under Office\16.0\Outlook\Resiliency
         // and then refuses to load the add-in. Remove only entries that name
