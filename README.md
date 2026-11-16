@@ -5,18 +5,18 @@ Windows 10/11, 32- or 64-bit. Built for Outlook 2019; other classic desktop vers
 Microsoft 365) use the same add-in interface. New Outlook, Mac and Outlook on the web are not supported. Everything runs on your computer: no account,
 no server, no text leaves Outlook.
 
-**Status: release candidate 2.0.0-rc.3 (November 2026), not yet tested in a real Outlook.**
+**Status: release candidate 2.0.0-rc.4 (November 2026), not yet tested in a real Outlook.**
 It uses the same correction engine as [LocalCorrect for Firefox](https://github.com/mrksrus/localcorrect-browser)
 version 2, ported to C#. The old 1.0.0-rc versions left most typos uncorrected and are
 replaced; they remain as git tags and releases.
 
 ## Install
 
-1. Close Outlook. An existing LocalCorrect install for this Windows user, including 1.0.0-rc.x,
-   is replaced. A registration that belongs to another product is left unchanged; setup names
-   that key and stops.
-2. Download `localcorrect-outlook-2.0.0-rc.3.zip` from the
-   [release](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v2.0.0-rc.3), unzip it
+1. Close Outlook. If LocalCorrect is already installed, setup updates it. If the existing
+   registration cannot be recognized, setup asks to remove it and then continues. It does not
+   stop with a conflict error.
+2. Download `localcorrect-outlook-2.0.0-rc.4.zip` from the
+   [release](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v2.0.0-rc.4), unzip it
    and run `LocalCorrect-Outlook-Setup.exe`. It installs for your Windows user only (no admin
    rights) under `%LOCALAPPDATA%\LocalCorrect\Outlook`.
 3. Start Outlook. If Outlook had blocked LocalCorrect after a previous start, setup clears that block for this add-in only. Failures during startup are written to `%LOCALAPPDATA%\LocalCorrect\Outlook\log.txt`.

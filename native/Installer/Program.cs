@@ -29,15 +29,22 @@ namespace LocalCorrect.Setup {
                 using (var framework = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full"))
                     if (framework == null || Convert.ToInt32(framework.GetValue("Release", 0)) < 528040) throw new InvalidOperationException("Install Microsoft .NET Framework 4.8 before continuing.");
                 if (MessageBox.Show("Install LocalCorrect for classic Outlook 2019 for this Windows user?\n\nEnglish and German correction runs offline. This installs an unsigned COM add-in. Your existing Office security policies remain in force.\n\nClose Outlook first. New Outlook is not supported.", "LocalCorrect setup", MessageBoxButtons.OKCancel, MessageBoxIcon.Information) != DialogResult.OK) return;
-                string retained = Install();
+                string retained;
+                if (!Install(out retained)) return;
                 MessageBox.Show("Installed. Start classic Outlook, pop out a compose window, and open the LocalCorrect tab. Ctrl+Shift+L corrects the selection, or the body above any quoted reply. Change language and shortcut in Settings.\n\nReview changes before sending. Ctrl+Z undoes a correction." + (retained == null ? "" : "\n\nRetained files were moved intact to:\n" + retained), "LocalCorrect");
             } catch (Exception ex) { MessageBox.Show(ex.Message, "LocalCorrect setup", MessageBoxButtons.OK, MessageBoxIcon.Error); Environment.ExitCode = 1; }
         }
         static RegistryView[] Views => Environment.Is64BitOperatingSystem ? new[] { RegistryView.Registry32, RegistryView.Registry64 } : new[] { RegistryView.Registry32 };
-        static string Install() {
-            EnsureNoForeignRegistration();
-            if (Directory.Exists(Root)) OwnedInstallation.VerifyOwnership(Root, Owner);
-            string retained = null;
+        static bool Install(out string retained) {
+            retained = null;
+            var conflicts = CollectConflicts();
+            bool folderUnverified = Directory.Exists(Root) && !FolderOwned();
+            if ((conflicts.Count != 0 || folderUnverified) && MessageBox.Show(OwnedRegistration.FormatReinstallPrompt(conflicts, folderUnverified), "LocalCorrect setup", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return false;
+            bool replaceExisting = conflicts.Count != 0 || folderUnverified;
+            if (folderUnverified) {
+                retained = Root + ".previous-" + Guid.NewGuid().ToString("N");
+                Directory.Move(Root, retained);
+            }
             string stage = Root + ".stage-" + Guid.NewGuid().ToString("N");
             try {
                 Directory.CreateDirectory(stage);
@@ -57,8 +64,8 @@ namespace LocalCorrect.Setup {
                 Directory.CreateDirectory(Path.GetDirectoryName(Root));
                 if (Directory.Exists(Root)) retained = OwnedInstallation.ArchiveRetained(Root, Owner);
                 Directory.Move(stage, Root);
-                try { Register(); } catch { RemoveOwnedRegistrations(); DeleteOwnedFiles(); throw; }
-                return retained;
+                try { Register(replaceExisting); } catch { RemoveOwnedRegistrations(); DeleteOwnedFiles(); throw; }
+                return true;
             } catch {
                 if (retained != null && !Directory.Exists(Root) && Directory.Exists(retained)) Directory.Move(retained, Root);
                 throw;
@@ -86,17 +93,22 @@ namespace LocalCorrect.Setup {
         static void Close(OwnedRegistration.HiveSlot[] slots) {
             foreach (var slot in slots) { var hive = slot.Hive as IDisposable; if (hive != null) hive.Dispose(); }
         }
-        static void EnsureNoForeignRegistration() {
+        static bool FolderOwned() {
+            try { OwnedInstallation.VerifyOwnership(Root, Owner); return true; }
+            catch (InvalidOperationException) { return false; }
+            catch (InvalidDataException) { return false; }
+        }
+        static List<OwnedRegistration.Conflict> CollectConflicts() {
             var slots = OpenSlots();
             try {
                 var conflicts = new List<OwnedRegistration.Conflict>();
                 foreach (var slot in slots) conflicts.AddRange(OwnedRegistration.FindConflicts(slot.Hive, slot.ViewName, slot.IncludeWowNode));
-                if (conflicts.Count != 0) throw new InvalidOperationException(OwnedRegistration.FormatConflict(conflicts));
+                return conflicts;
             } finally { Close(slots); }
         }
-        static void Register() {
+        static void Register(bool replaceExisting) {
             var slots = OpenSlots();
-            try { OwnedRegistration.Replace(slots, Facts()); }
+            try { OwnedRegistration.Replace(slots, Facts(), replaceExisting); }
             finally { Close(slots); }
         }
         static void RemoveOwnedRegistrations() {

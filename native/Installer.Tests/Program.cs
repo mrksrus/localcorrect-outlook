@@ -191,6 +191,16 @@ try {
     catch (InvalidOperationException ex) { emptyMessage = ex.Message; }
     Assert(emptyMessage != null && emptyMessage.Contains(addinPath) && emptyMessage.Contains("absent") && (int)empty.GetValue(addinPath, "LoadBehavior") == 2, "An unidentified add-in key was replaced"); passed++;
 
+    var update = new OwnedRegistration.MemoryHive();
+    update.SetValue(clsidPath, "", "Contoso.Mail.AddIn", false);
+    update.SetValue(clsidPath, OwnedRegistration.OwnerValue, "Contoso", false);
+    update.SetValue(@"Software\Classes\CLSID\{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}", "", "Other.AddIn", false);
+    string prompt = OwnedRegistration.FormatReinstallPrompt(OwnedRegistration.FindConflicts(update, "64-bit", false), false);
+    Assert(prompt.Contains("Remove the installed version and continue?") && prompt.Contains(clsidPath) && !prompt.Contains("conflict"), "Reinstall prompt still looks like a hard conflict error");
+    OwnedRegistration.Replace(new[] { new OwnedRegistration.HiveSlot { Hive = update, ViewName = "64-bit", IncludeWowNode = false } }, facts, true);
+    Assert(Registered(update), "Confirmed reinstall did not replace the installed registration");
+    Assert((string)update.GetValue(@"Software\Classes\CLSID\{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}", "") == "Other.AddIn", "Confirmed reinstall removed an unrelated class"); passed++;
+
     var resiliency = new OwnedRegistration.MemoryHive();
     string disabled = @"Software\Microsoft\Office\16.0\Outlook\Resiliency\DisabledItems";
     string crashing = @"Software\Microsoft\Office\16.0\Outlook\Resiliency\CrashingAddinList";
