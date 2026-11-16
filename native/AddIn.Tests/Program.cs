@@ -128,7 +128,7 @@ class Program {
             Console.Error.WriteLine(written);
             return 8;
         }
-        Console.WriteLine("PASS com activation through the setup registry entries");
+        Console.WriteLine("PASS com activation through the mscoree registration");
         if (refCode != 0) Console.WriteLine("NOTE RefSafetyRules probe did not survive COM activation (" + Hex(refCode) + ")");
         if (badCode != 0) Console.WriteLine("NOTE old interface shape did not survive COM activation (" + Hex(badCode) + ")");
         return 0;
@@ -145,19 +145,40 @@ class Program {
             object created = Activator.CreateInstance(type);
             Console.WriteLine("created " + (created == null ? "null" : created.GetType().FullName));
             if (which == "refsafety") return created == null ? 3 : 0;
-            var extensibility = (OutlookExtensibility)created;
-            object[] custom = null;
-            Console.WriteLine("before-call");
-            extensibility.OnConnection(new object(), 0, new object(), ref custom);
-            Console.WriteLine("onconnection-returned");
-            extensibility.OnStartupComplete(ref custom);
-            Console.WriteLine("onstartup-returned");
-            return 0;
+            // CreateInstance unwraps a managed COM class back to the raw object.
+            // Outlook does not: it calls the CCW vtable. QueryInterface and call
+            // slot 7 (OnConnection, after IDispatch) with a null SAFEARRAY.
+            return CallThroughCom(created);
         } catch (Exception ex) {
             Console.Error.WriteLine(ex);
             return 1;
         }
     }
+
+    static int CallThroughCom(object created) {
+        var iid = new Guid("B65AD801-ABAF-11D0-BB8B-00A0C90F2744");
+        IntPtr unknown = Marshal.GetIUnknownForObject(created);
+        IntPtr iface;
+        int hr = Marshal.QueryInterface(unknown, ref iid, out iface);
+        Marshal.Release(unknown);
+        Console.WriteLine("QI " + hr.ToString("X8"));
+        if (hr != 0 || iface == IntPtr.Zero) return 4;
+        try {
+            IntPtr slot = Marshal.ReadIntPtr(Marshal.ReadIntPtr(iface), IntPtr.Size * 7);
+            var onConnection = (OnConnectionNative)Marshal.GetDelegateForFunctionPointer(slot, typeof(OnConnectionNative));
+            IntPtr custom = Marshal.AllocHGlobal(IntPtr.Size);
+            Marshal.WriteIntPtr(custom, IntPtr.Zero);
+            try {
+                Console.WriteLine("before-vtable");
+                int call = onConnection(iface, IntPtr.Zero, 0, IntPtr.Zero, custom);
+                Console.WriteLine("vtable hr " + call.ToString("X8"));
+                return call == 0 ? 0 : 5;
+            } finally { Marshal.FreeHGlobal(custom); }
+        } finally { Marshal.Release(iface); }
+    }
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    delegate int OnConnectionNative(IntPtr self, IntPtr application, int connectMode, IntPtr addInInst, IntPtr custom);
 
     static int RunChild(string which) {
         var start = new ProcessStartInfo(Assembly.GetExecutingAssembly().Location, "activate " + which) { UseShellExecute = false };
@@ -260,14 +281,4 @@ class Program {
     }
 
     static string Hex(int code) { return code + " (0x" + unchecked((uint)code).ToString("X8") + ")"; }
-
-    // What 64-bit Outlook calls: the imported IDTExtensibility2, not a direct managed call.
-    [ComImport, Guid("B65AD801-ABAF-11D0-BB8B-00A0C90F2744"), InterfaceType(ComInterfaceType.InterfaceIsDual)]
-    interface OutlookExtensibility {
-        [DispId(1)] void OnConnection([MarshalAs(UnmanagedType.IDispatch)] object application, int connectMode, [MarshalAs(UnmanagedType.IDispatch)] object addInInst, [MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_VARIANT)] ref object[] custom);
-        [DispId(2)] void OnDisconnection(int removeMode, [MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_VARIANT)] ref object[] custom);
-        [DispId(3)] void OnAddInsUpdate([MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_VARIANT)] ref object[] custom);
-        [DispId(4)] void OnStartupComplete([MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_VARIANT)] ref object[] custom);
-        [DispId(5)] void OnBeginShutdown([MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_VARIANT)] ref object[] custom);
-    }
 }
