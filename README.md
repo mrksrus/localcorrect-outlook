@@ -5,7 +5,7 @@ Windows 10/11, 32- or 64-bit. Built for Outlook 2019; other classic desktop vers
 Microsoft 365) use the same add-in interface. New Outlook, Mac and Outlook on the web are not supported. Everything runs on your computer: no account,
 no server, no text leaves Outlook.
 
-**Status: release candidate 2.0.0-rc.4 (November 2026), not yet tested in a real Outlook.**
+**Status: release candidate 2.0.0-rc.5 (November 2026), not yet tested in a real Outlook.**
 It uses the same correction engine as [LocalCorrect for Firefox](https://github.com/mrksrus/localcorrect-browser)
 version 2, ported to C#. The old 1.0.0-rc versions left most typos uncorrected and are
 replaced; they remain as git tags and releases.
@@ -15,11 +15,21 @@ replaced; they remain as git tags and releases.
 1. Close Outlook. If LocalCorrect is already installed, setup updates it. If the existing
    registration cannot be recognized, setup asks to remove it and then continues. It does not
    stop with a conflict error.
-2. Download `localcorrect-outlook-2.0.0-rc.4.zip` from the
-   [release](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v2.0.0-rc.4), unzip it
+2. Download `localcorrect-outlook-2.0.0-rc.5.zip` from the
+   [release](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v2.0.0-rc.5), unzip it
    and run `LocalCorrect-Outlook-Setup.exe`. It installs for your Windows user only (no admin
    rights) under `%LOCALAPPDATA%\LocalCorrect\Outlook`.
-3. Start Outlook. If Outlook had blocked LocalCorrect after a previous start, setup clears that block for this add-in only. Failures during startup are written to `%LOCALAPPDATA%\LocalCorrect\Outlook\log.txt`.
+3. Start Outlook. Setup clears Outlook's crash block for this add-in only (Disabled Items,
+   Crashing Add-in List, and startup records that name `LocalCorrect.Outlook.dll`) and sets
+   it to load at startup. If LocalCorrect is still listed as disabled: close Outlook, run
+   setup again, then in Outlook open File → Options → Add-ins, choose Manage: COM Add-ins → Go,
+   and check LocalCorrect. Also set Manage to Disabled Items and enable it if it is listed.
+   The first lines of a successful load are in `%LOCALAPPDATA%\LocalCorrect\Outlook\log.txt`.
+4. If Outlook still closes on the splash screen, close any leftover Outlook process and run
+   `LocalCorrect-Outlook-Setup.exe /diagnose` (the copy you downloaded, or the installed one).
+   It does not change the machine. It checks the COM registration, loads the DLL outside
+   Outlook, and activates it the way Outlook does. The result is
+   `%LOCALAPPDATA%\LocalCorrect\Outlook\diagnose.txt`.
 
 Needs .NET Framework 4.8 (included in current Windows 10/11). The installer is unsigned, so
 Windows SmartScreen may warn; Office policies that allow only signed add-ins will block it.

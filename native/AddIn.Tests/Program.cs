@@ -1,14 +1,29 @@
 using System;
+using System.Diagnostics;
 using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
+using Microsoft.Win32;
 using LocalCorrect;
 using LocalCorrect.Outlook;
 
 // Runs under .NET Framework 4.8 on Windows CI, the same runtime Outlook hosts.
-// An access violation in clr.dll (0x80131506) kills this process and fails the build.
+// An access violation in clr.dll (0x80131506) kills the child process and fails the build.
 class Program {
+    const string ProductClsid = "{708F01D3-893E-43D0-8215-61722BC46F23}";
+    const string BadClsid = "{708F01D3-893E-43D0-8215-61722BC46F24}";
+    const string RefClsid = "{708F01D3-893E-43D0-8215-61722BC46F25}";
+
     [STAThread]
-    static int Main() {
+    static int Main(string[] args) {
+        if (args.Length >= 2 && args[0] == "activate") return Activate(args[1]);
+        int managed = ManagedLoad();
+        if (managed != 0) return managed;
+        return ComActivation();
+    }
+
+    static int ManagedLoad() {
         Exception probe = null;
         var thread = new Thread(() => {
             try {
@@ -21,10 +36,10 @@ class Program {
         thread.Join();
         if (probe != null) { Console.Error.WriteLine(probe); return 1; }
 
-        string log = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalCorrect", "Outlook", "log.txt");
+        string log = LogPath();
         try { if (File.Exists(log)) File.Delete(log); } catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
         var addin = new AddIn();
-        Array custom = null;
+        object[] custom = null;
         addin.OnConnection(new object(), 0, new object(), ref custom);
         addin.OnStartupComplete(ref custom);
         if (addin.GetCustomUI("Microsoft.Outlook.Explorer") != null) return 2;
@@ -38,11 +53,160 @@ class Program {
             if (seen.IndexOf("word lists ready", StringComparison.Ordinal) >= 0) break;
             Thread.Sleep(200);
         }
-        if (seen.IndexOf("OnConnection returned", StringComparison.Ordinal) < 0) { Console.Error.WriteLine(seen); return 4; }
+        if (seen.IndexOf("type constructed", StringComparison.Ordinal) < 0 || seen.IndexOf("OnConnection returned", StringComparison.Ordinal) < 0) { Console.Error.WriteLine(seen); return 4; }
         if (seen.IndexOf("OnStartupComplete returned", StringComparison.Ordinal) < 0) { Console.Error.WriteLine(seen); return 5; }
         if (seen.IndexOf("word lists ready", StringComparison.Ordinal) < 0) { Console.Error.WriteLine(seen); return 6; }
         addin.OnDisconnection(0, ref custom);
         Console.WriteLine("PASS add-in load and correction under this runtime");
         return 0;
+    }
+
+    // Outlook activates via mscoree CoCreateInstance on the CLSID setup writes.
+    // `new AddIn()` never enters that path. Each probe is a child process so an
+    // access violation is an exit code instead of taking down the test host.
+    static int ComActivation() {
+        if (!Environment.Is64BitProcess) { Console.Error.WriteLine("COM activation probe must run as 64-bit"); return 7; }
+        Console.WriteLine("clr " + ClrVersion());
+        try {
+            foreach (var attr in typeof(AddIn).Assembly.ManifestModule.GetCustomAttributes(false)) {
+                if (attr.GetType().Name.IndexOf("RefSafety", StringComparison.Ordinal) >= 0) {
+                    Console.Error.WriteLine("product module still has " + attr.GetType().FullName);
+                    return 9;
+                }
+            }
+        } catch (Exception ex) { Console.Error.WriteLine(ex); return 9; }
+
+        string dir = AppDomain.CurrentDomain.BaseDirectory;
+        string product = Path.Combine(dir, "LocalCorrect.Outlook.dll");
+        string bad = Path.Combine(dir, "LocalCorrect.ComProbe.Bad.dll");
+        string refsafety = Path.Combine(dir, "LocalCorrect.ComProbe.RefSafety.dll");
+        int refCode = -1, badCode = -1, productCode = -1;
+        try {
+            Register(RefClsid, "LocalCorrect.ComProbe.ProbeRefSafety", refsafety, false);
+            refCode = RunChild("refsafety");
+            Console.WriteLine("PROBE refsafety exit " + Hex(refCode));
+            Register(BadClsid, "LocalCorrect.ComProbe.BadAddIn", bad, false);
+            badCode = RunChild("bad");
+            Console.WriteLine("PROBE old-interface exit " + Hex(badCode));
+            Register(ProductClsid, "LocalCorrect.Outlook.AddIn", product, false);
+            int plainCode = RunChild("product");
+            Console.WriteLine("PROBE product-no-version-subkey exit " + Hex(plainCode));
+            Register(ProductClsid, "LocalCorrect.Outlook.AddIn", product, true);
+            try { if (File.Exists(LogPath())) File.Delete(LogPath()); }
+            catch (Exception ex) { Console.Error.WriteLine(ex); return 8; }
+            if (File.Exists(LogPath())) { Console.Error.WriteLine("could not reset log.txt"); return 8; }
+            productCode = RunChild("product");
+            Console.WriteLine("PROBE product exit " + Hex(productCode));
+            string log = File.Exists(LogPath()) ? File.ReadAllText(LogPath()) : "";
+            Console.WriteLine("PROBE product log " + (log.Length == 0 ? "(none)" : log.Replace("\r", " ").Replace("\n", " | ")));
+        } finally {
+            Delete(RefClsid);
+            Delete(BadClsid);
+            Delete(ProductClsid);
+        }
+        if (productCode != 0) { Console.Error.WriteLine("COM activation of LocalCorrect.Outlook failed"); return 8; }
+        string written = File.Exists(LogPath()) ? File.ReadAllText(LogPath()) : "";
+        if (written.IndexOf("type constructed", StringComparison.Ordinal) < 0 || written.IndexOf("OnConnection returned", StringComparison.Ordinal) < 0) {
+            Console.Error.WriteLine(written);
+            return 8;
+        }
+        Console.WriteLine("PASS com activation through the setup registry entries");
+        if (refCode != 0) Console.WriteLine("NOTE RefSafetyRules probe did not survive COM activation (" + Hex(refCode) + ")");
+        if (badCode != 0) Console.WriteLine("NOTE old interface shape did not survive COM activation (" + Hex(badCode) + ")");
+        return 0;
+    }
+
+    static int Activate(string which) {
+        Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
+        try {
+            string clsid = which == "product" ? ProductClsid : which == "bad" ? BadClsid : RefClsid;
+            Console.WriteLine("before-cocreate " + which);
+            Type type = Type.GetTypeFromCLSID(new Guid(clsid), true);
+            object created = Activator.CreateInstance(type);
+            Console.WriteLine("created " + (created == null ? "null" : created.GetType().FullName));
+            if (which == "refsafety") return created == null ? 3 : 0;
+            var extensibility = (OutlookExtensibility)created;
+            object[] custom = null;
+            Console.WriteLine("before-call");
+            extensibility.OnConnection(new object(), 0, new object(), ref custom);
+            Console.WriteLine("onconnection-returned");
+            extensibility.OnStartupComplete(ref custom);
+            Console.WriteLine("onstartup-returned");
+            return 0;
+        } catch (Exception ex) {
+            Console.Error.WriteLine(ex);
+            return 1;
+        }
+    }
+
+    static int RunChild(string which) {
+        var start = new ProcessStartInfo(Assembly.GetExecutingAssembly().Location, "activate " + which) { UseShellExecute = false };
+        using (var process = Process.Start(start)) {
+            if (!process.WaitForExit(45000)) { try { process.Kill(); } catch { } return -2; }
+            return process.ExitCode;
+        }
+    }
+
+    static void Register(string clsid, string className, string dll, bool versionSubkey) {
+        var identity = AssemblyName.GetAssemblyName(dll);
+        string codeBase = new Uri(dll).AbsoluteUri;
+        Console.WriteLine("register " + clsid + " " + identity.FullName + " " + codeBase + (versionSubkey ? " +version" : ""));
+        foreach (RegistryView view in Views()) {
+            using (var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view)) {
+                string key = @"Software\Classes\CLSID\" + clsid;
+                string inproc = key + @"\InprocServer32";
+                Put(root, key, "", className);
+                Put(root, inproc, "", "mscoree.dll");
+                Put(root, inproc, "ThreadingModel", "Both");
+                Put(root, inproc, "Class", className);
+                Put(root, inproc, "Assembly", identity.FullName);
+                Put(root, inproc, "RuntimeVersion", "v4.0.30319");
+                Put(root, inproc, "CodeBase", codeBase);
+                Put(root, key + @"\ProgId", "", className);
+                if (!versionSubkey) continue;
+                string sub = inproc + "\\" + identity.Version;
+                Put(root, sub, "Class", className);
+                Put(root, sub, "Assembly", identity.FullName);
+                Put(root, sub, "RuntimeVersion", "v4.0.30319");
+                Put(root, sub, "CodeBase", codeBase);
+            }
+        }
+    }
+
+    static void Put(RegistryKey root, string path, string name, string value) {
+        using (var key = root.CreateSubKey(path)) key.SetValue(name, value);
+    }
+
+    static void Delete(string clsid) {
+        foreach (RegistryView view in Views()) {
+            using (var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view)) {
+                try { root.DeleteSubKeyTree(@"Software\Classes\CLSID\" + clsid, false); } catch { }
+            }
+        }
+    }
+
+    static RegistryView[] Views() {
+        return Environment.Is64BitOperatingSystem ? new[] { RegistryView.Registry32, RegistryView.Registry64 } : new[] { RegistryView.Registry32 };
+    }
+
+    static string LogPath() {
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalCorrect", "Outlook", "log.txt");
+    }
+
+    static string ClrVersion() {
+        string path = Path.Combine(Environment.GetEnvironmentVariable("WINDIR") ?? @"C:\Windows", @"Microsoft.NET\Framework64\v4.0.30319\clr.dll");
+        return File.Exists(path) ? FileVersionInfo.GetVersionInfo(path).FileVersion + " " + path : "clr.dll not found";
+    }
+
+    static string Hex(int code) { return code + " (0x" + unchecked((uint)code).ToString("X8") + ")"; }
+
+    // What 64-bit Outlook calls: the imported IDTExtensibility2, not a direct managed call.
+    [ComImport, Guid("B65AD801-ABAF-11D0-BB8B-00A0C90F2744"), InterfaceType(ComInterfaceType.InterfaceIsDual)]
+    interface OutlookExtensibility {
+        [DispId(1)] void OnConnection([MarshalAs(UnmanagedType.IDispatch)] object application, int connectMode, [MarshalAs(UnmanagedType.IDispatch)] object addInInst, [MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_VARIANT)] ref object[] custom);
+        [DispId(2)] void OnDisconnection(int removeMode, [MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_VARIANT)] ref object[] custom);
+        [DispId(3)] void OnAddInsUpdate([MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_VARIANT)] ref object[] custom);
+        [DispId(4)] void OnStartupComplete([MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_VARIANT)] ref object[] custom);
+        [DispId(5)] void OnBeginShutdown([MarshalAs(UnmanagedType.SafeArray, SafeArraySubType = VarEnum.VT_VARIANT)] ref object[] custom);
     }
 }

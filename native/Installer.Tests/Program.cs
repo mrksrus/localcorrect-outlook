@@ -94,6 +94,10 @@ try {
             && (string)hive.GetValue(clsidPath, OwnedRegistration.OwnerValue) == OwnedRegistration.Owner
             && (string)hive.GetValue(inprocPath, "Assembly") == facts.AssemblyFullName
             && (string)hive.GetValue(inprocPath, "CodeBase") == facts.CodeBase
+            && (string)hive.GetValue(inprocPath + @"\2.0.0.0", "Class") == OwnedRegistration.ProgId
+            && (string)hive.GetValue(inprocPath + @"\2.0.0.0", "Assembly") == facts.AssemblyFullName
+            && (string)hive.GetValue(inprocPath + @"\2.0.0.0", "RuntimeVersion") == "v4.0.30319"
+            && (string)hive.GetValue(inprocPath + @"\2.0.0.0", "CodeBase") == facts.CodeBase
             && (string)hive.GetValue(progPath + @"\CLSID", "") == OwnedRegistration.Clsid
             && (int)hive.GetValue(addinPath, "LoadBehavior") == 3
             && (int)hive.GetValue(OwnedRegistration.UninstallKey, "NoModify") == 1;
@@ -211,8 +215,12 @@ try {
     resiliency.SetValue(crashing, @"c:\users\sam\appdata\local\localcorrect\outlook\localcorrect.outlook.dll", new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 }, false);
     resiliency.SetValue(crashing, @"C:\Program Files\Contoso\Contoso.Outlook.dll", new byte[] { 1 }, false);
     resiliency.SetValue(@"Software\Microsoft\Office\15.0\Outlook\Resiliency\DisabledItems", "9", Encoding.ASCII.GetBytes("LocalCorrect.Outlook.AddIn"), false);
+    string startup = @"Software\Microsoft\Office\16.0\Outlook\Resiliency\StartupItems";
+    resiliency.SetValue(startup, "oa,", Encoding.Unicode.GetBytes("c:\\users\\sam\\appdata\\local\\localcorrect\\outlook\\localcorrect.outlook.dll"), false);
+    resiliency.SetValue(startup, "other", Encoding.Unicode.GetBytes("Contoso"), false);
     OwnedRegistration.ClearResiliency(resiliency);
-    Assert(resiliency.GetValue(disabled, "1") == null && resiliency.GetValue(crashing, @"c:\users\sam\appdata\local\localcorrect\outlook\localcorrect.outlook.dll") == null, "Outlook resiliency entries for LocalCorrect were kept");
+    Assert(resiliency.GetValue(disabled, "1") == null && resiliency.GetValue(crashing, @"c:\users\sam\appdata\local\localcorrect\outlook\localcorrect.outlook.dll") == null && resiliency.GetValue(startup, "oa,") == null, "Outlook resiliency entries for LocalCorrect were kept");
+    Assert(resiliency.GetValue(startup, "other") != null, "Another product's startup record was removed");
     Assert(resiliency.GetValue(disabled, "2") != null && resiliency.GetValue(crashing, @"C:\Program Files\Contoso\Contoso.Outlook.dll") != null, "Another product's resiliency entry was removed");
     Assert(resiliency.GetValue(@"Software\Microsoft\Office\15.0\Outlook\Resiliency\DisabledItems", "9") == null, "Older Office resiliency entry for LocalCorrect was kept"); passed++;
 

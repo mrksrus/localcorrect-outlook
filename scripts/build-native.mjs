@@ -26,8 +26,8 @@ for (const project of ['native/Engine.Tests/LocalCorrect.Engine.Tests.csproj', '
     execFileSync(exe, [], {stdio: 'inherit'});
   }
 }
-// Hosts the COM add-in object under .NET Framework 4.8, the runtime Outlook uses.
-// A crash here (process death, including CLR 0x80131506) fails the Windows build.
+// Hosts the COM add-in under .NET Framework 4.8, then CoCreates it through the
+// CLSID registration setup writes. A clr.dll access violation fails the Windows build.
 const addinHost = 'native/AddIn.Tests/LocalCorrect.AddIn.Tests.csproj';
 run('build', addinHost, '-c', 'Release', ...locked);
 if (process.platform === 'win32') execFileSync('native/AddIn.Tests/bin/Release/net48/LocalCorrect.AddIn.Tests.exe', [], {stdio: 'inherit'});

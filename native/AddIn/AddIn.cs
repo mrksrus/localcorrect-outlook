@@ -1,16 +1,16 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace LocalCorrect.Outlook {
     [ComVisible(true), Guid("708F01D3-893E-43D0-8215-61722BC46F23"), ProgId("LocalCorrect.Outlook.AddIn"), ClassInterface(ClassInterfaceType.AutoDispatch)]
     public sealed class AddIn : IDTExtensibility2, IRibbonExtensibility {
-        dynamic application;
+        object application;
         Settings settings;
         HotkeyWindow window;
         Timer timer;
@@ -18,25 +18,26 @@ namespace LocalCorrect.Outlook {
         readonly object engineGate = new object();
         bool busy;
         volatile bool disconnected;
-        // Do not subscribe to AppDomain.AssemblyResolve. A handler that runs while
-        // the CLR is still binding this add-in (German satellite probes, dynamic
-        // binder, file logging) re-enters the loader and the Framework 4.8 CLR
-        // dies with 0x80131506 / an access violation in clr.dll. try/catch cannot
-        // stop that. OnConnection and OnStartupComplete also must not touch
-        // Windows Forms or the engine type: those run on Outlook's UI thread.
-        public void OnConnection(object app, int connectMode, object addInInst, ref Array custom) {
+        // The instance constructor is the first of our code mscoree runs. Log before
+        // anything else, with no culture, Windows Forms, or engine type involved.
+        public AddIn() { StartupLog.Write("type constructed"); }
+        // Do not subscribe to AppDomain.AssemblyResolve: a handler during binding
+        // re-enters the loader. OnConnection stores the host as object so the
+        // dynamic binder (and its satellite probes) stays off this call.
+        public void OnConnection(object app, int connectMode, object addInInst, ref object[] custom) {
+            StartupLog.Write("OnConnection enter thread " + System.Threading.Thread.CurrentThread.ManagedThreadId);
             Guard("OnConnection", () => {
-                StartupLog.Write("OnConnection begin thread " + System.Threading.Thread.CurrentThread.ManagedThreadId + " " + SafeLocation());
+                StartupLog.Write("OnConnection begin " + SafeLocation());
                 application = app; disconnected = false;
                 StartupLog.Write("OnConnection returned");
             });
         }
-        public void OnDisconnection(int removeMode, ref Array custom) {
+        public void OnDisconnection(int removeMode, ref object[] custom) {
             Guard("OnDisconnection", () => { disconnected = true; try { timer?.Stop(); timer?.Dispose(); } catch { } try { window?.Dispose(); } catch { } application = null; });
         }
-        public void OnBeginShutdown(ref Array custom) { OnDisconnection(0, ref custom); }
-        public void OnAddInsUpdate(ref Array custom) { }
-        public void OnStartupComplete(ref Array custom) {
+        public void OnBeginShutdown(ref object[] custom) { OnDisconnection(0, ref custom); }
+        public void OnAddInsUpdate(ref object[] custom) { }
+        public void OnStartupComplete(ref object[] custom) {
             Guard("OnStartupComplete", () => {
                 StartEngine();
                 StartupLog.Write("OnStartupComplete returned");
@@ -99,7 +100,7 @@ namespace LocalCorrect.Outlook {
         bool TryTarget(out dynamic inspector, out dynamic doc, out IntPtr hwnd) {
             inspector = null; doc = null; hwnd = IntPtr.Zero;
             if (disconnected || application == null) return false;
-            inspector = application.ActiveInspector();
+            inspector = ((dynamic)application).ActiveInspector();
             if (inspector == null) return false;
             ((IOleWindow)inspector).GetWindow(out hwnd);
             if (hwnd != HotkeyWindow.GetForegroundWindow()) return false;
@@ -214,11 +215,22 @@ namespace LocalCorrect.Outlook {
                     previous = message;
                     string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalCorrect", "Outlook");
                     Directory.CreateDirectory(dir);
-                    DateTime n = DateTime.UtcNow;
-                string line = n.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) + " " + message + Environment.NewLine;
-                    File.AppendAllText(Path.Combine(dir, "log.txt"), line);
+                    // Ticks plus ASCII/UTF-8 only. CultureInfo loads globalization
+                    // data on first use; that must not be on the COM activation path.
+                    string line = Digits(DateTime.UtcNow.Ticks) + " " + message + "\r\n";
+                    using (var stream = new FileStream(Path.Combine(dir, "log.txt"), FileMode.Append, FileAccess.Write, FileShare.ReadWrite)) {
+                        byte[] bytes = Encoding.UTF8.GetBytes(line);
+                        stream.Write(bytes, 0, bytes.Length);
+                        stream.Flush(true);
+                    }
                 }
             } catch { }
+        }
+        static string Digits(long value) {
+            var buf = new char[20];
+            int n = buf.Length;
+            do { buf[--n] = (char)('0' + value % 10); value /= 10; } while (value != 0);
+            return new string(buf, n, buf.Length - n);
         }
         internal static void Write(Exception ex) { Write(ex == null ? "null exception" : ex.ToString()); }
     }
