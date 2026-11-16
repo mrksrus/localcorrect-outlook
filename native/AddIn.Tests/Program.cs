@@ -77,9 +77,15 @@ class Program {
         } catch (Exception ex) { Console.Error.WriteLine(ex); return 9; }
 
         string dir = AppDomain.CurrentDomain.BaseDirectory;
-        string product = Path.Combine(dir, "LocalCorrect.Outlook.dll");
-        string bad = Path.Combine(dir, "LocalCorrect.ComProbe.Bad.dll");
-        string refsafety = Path.Combine(dir, "LocalCorrect.ComProbe.RefSafety.dll");
+        // A short path. The runner's checkout path is valid too; this just keeps CodeBase obvious in the log.
+        string probeRoot = Path.Combine(Path.GetTempPath(), "lc-com");
+        Directory.CreateDirectory(probeRoot);
+        foreach (string name in new[] { "LocalCorrect.Outlook.dll", "LocalCorrect.ComProbe.Bad.dll", "LocalCorrect.ComProbe.RefSafety.dll" })
+            File.Copy(Path.Combine(dir, name), Path.Combine(probeRoot, name), true);
+        string product = Path.Combine(probeRoot, "LocalCorrect.Outlook.dll");
+        string bad = Path.Combine(probeRoot, "LocalCorrect.ComProbe.Bad.dll");
+        string refsafety = Path.Combine(probeRoot, "LocalCorrect.ComProbe.RefSafety.dll");
+        ShowRegAsm(product);
         int refCode = -1, badCode = -1, productCode = -1;
         try {
             Register(RefClsid, "LocalCorrect.ComProbe.ProbeRefSafety", refsafety, false);
@@ -120,6 +126,8 @@ class Program {
         Console.SetOut(new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true });
         try {
             string clsid = which == "product" ? ProductClsid : which == "bad" ? BadClsid : RefClsid;
+            Console.WriteLine("child " + (Environment.Is64BitProcess ? "64-bit" : "32-bit"));
+            DumpClsid(clsid);
             Console.WriteLine("before-cocreate " + which);
             Type type = Type.GetTypeFromCLSID(new Guid(clsid), true);
             object created = Activator.CreateInstance(type);
@@ -150,7 +158,7 @@ class Program {
     static void Register(string clsid, string className, string dll, bool versionSubkey) {
         var identity = AssemblyName.GetAssemblyName(dll);
         string codeBase = new Uri(dll).AbsoluteUri;
-        Console.WriteLine("register " + clsid + " " + identity.FullName + " " + codeBase + (versionSubkey ? " +version" : ""));
+        Console.WriteLine("register " + clsid + " " + identity.FullName + " " + codeBase + " exists=" + File.Exists(dll) + (versionSubkey ? " +version" : ""));
         foreach (RegistryView view in Views()) {
             using (var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view)) {
                 string key = @"Software\Classes\CLSID\" + clsid;
@@ -171,6 +179,39 @@ class Program {
                 Put(root, sub, "CodeBase", codeBase);
             }
         }
+    }
+
+    static void DumpClsid(string clsid) {
+        foreach (RegistryView view in Views()) {
+            using (var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view)) {
+                string inproc = @"Software\Classes\CLSID\" + clsid + @"\InprocServer32";
+                using (var key = root.OpenSubKey(inproc)) {
+                    if (key == null) { Console.WriteLine("child " + view + " InprocServer32 missing"); continue; }
+                    string code = key.GetValue("CodeBase") as string;
+                    Console.WriteLine("child " + view + " default=" + key.GetValue("") + " class=" + key.GetValue("Class") + " assembly=" + key.GetValue("Assembly") + " runtime=" + key.GetValue("RuntimeVersion") + " code=" + code);
+                    if (!string.IsNullOrEmpty(code)) {
+                        try { Console.WriteLine("child file exists=" + File.Exists(new Uri(code).LocalPath)); }
+                        catch (Exception ex) { Console.WriteLine("child codebase " + ex.Message); }
+                    }
+                }
+            }
+        }
+    }
+
+    static void ShowRegAsm(string dll) {
+        string regasm = Path.Combine(Environment.GetEnvironmentVariable("WINDIR") ?? @"C:\Windows", @"Microsoft.NET\Framework64\v4.0.30319\RegAsm.exe");
+        string reg = Path.Combine(Path.GetTempPath(), "lc-regasm.reg");
+        if (!File.Exists(regasm)) { Console.WriteLine("regasm missing " + regasm); return; }
+        var start = new ProcessStartInfo(regasm, "/codebase /regfile:\"" + reg + "\" \"" + dll + "\"") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true };
+        using (var process = Process.Start(start)) {
+            string output = process.StandardOutput.ReadToEnd();
+            string error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            Console.WriteLine("regasm /regfile exit " + process.ExitCode);
+            if (output.Length != 0) Console.WriteLine(output);
+            if (error.Length != 0) Console.WriteLine(error);
+        }
+        if (File.Exists(reg)) Console.WriteLine(File.ReadAllText(reg));
     }
 
     static void Put(RegistryKey root, string path, string name, string value) {
