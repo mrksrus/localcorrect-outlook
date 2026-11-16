@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -13,32 +14,71 @@ namespace LocalCorrect.Outlook {
         Settings settings;
         HotkeyWindow window;
         Timer timer;
-        Task<Corrector> engine;
+        volatile Task<Corrector> engine;
+        readonly object engineGate = new object();
         bool busy;
         volatile bool disconnected;
+        static AddIn() {
+            try { AppDomain.CurrentDomain.AssemblyResolve += (sender, args) => { if (args.Name == null || args.Name.IndexOf(".resources", StringComparison.OrdinalIgnoreCase) < 0) StartupLog.Write("assembly resolve " + args.Name); return null; }; }
+            catch { }
+        }
+        // OnConnection runs on Outlook's UI thread and is timed. Do not create a
+        // window here (that pumps messages and can re-enter Outlook) and do not
+        // touch the engine type (its static setup and word lists take about a
+        // second). Any exception that escapes is caught by Outlook and recorded
+        // as a crash, with no .NET Runtime event.
         public void OnConnection(object app, int connectMode, object addInInst, ref Array custom) {
-            application = app; settings = Settings.Load(); disconnected = false;
-            window = new HotkeyWindow(() => Correct(true));
-            timer = new Timer { Interval = 250 };
-            timer.Tick += (s, e) => UpdateHotkey(); timer.Start();
-            // Load the word lists off the Office UI thread (about 1-2 s). No email is read.
-            engine = Task.Run(() => Corrector.FromEmbeddedData());
+            Guard("OnConnection", () => {
+                StartupLog.Write("OnConnection begin thread " + System.Threading.Thread.CurrentThread.ManagedThreadId + " " + SafeLocation());
+                application = app; disconnected = false;
+                StartEngine();
+                StartupLog.Write("OnConnection returned");
+            });
         }
         public void OnDisconnection(int removeMode, ref Array custom) {
-            disconnected = true; timer?.Stop(); timer?.Dispose(); window?.Dispose(); application = null;
+            Guard("OnDisconnection", () => { disconnected = true; try { timer?.Stop(); timer?.Dispose(); } catch { } try { window?.Dispose(); } catch { } application = null; });
         }
         public void OnBeginShutdown(ref Array custom) { OnDisconnection(0, ref custom); }
         public void OnAddInsUpdate(ref Array custom) { }
-        public void OnStartupComplete(ref Array custom) { }
-        public string GetCustomUI(string ribbonId) {
-            if (ribbonId != "Microsoft.Outlook.Mail.Compose") return null;
-            return @"<customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'><ribbon><tabs><tab id='localCorrectTab' label='LocalCorrect'><group id='localCorrectGroup' label='Offline EN / DE'><button id='lcCorrect' label='Correct selection / body' size='large' onAction='CorrectAction' screentip='Correct selected prose, or the editable body when nothing is selected'/><button id='lcSettings' label='Settings / Einstellungen' onAction='SettingsAction'/></group></tab></tabs></ribbon></customUI>";
+        public void OnStartupComplete(ref Array custom) {
+            Guard("OnStartupComplete", () => {
+                if (settings == null) settings = Settings.Load();
+                if (timer == null) { timer = new Timer { Interval = 250 }; timer.Tick += (s, e) => UpdateHotkey(); timer.Start(); }
+                StartupLog.Write("OnStartupComplete returned");
+            });
         }
-        public void CorrectAction(object control) { Correct(false); }
-        public void SettingsAction(object control) { window?.Unregister(); settings.Show(); UpdateHotkey(); }
+        public string GetCustomUI(string ribbonId) {
+            try {
+                if (ribbonId != "Microsoft.Outlook.Mail.Compose") return null;
+                return @"<customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'><ribbon><tabs><tab id='localCorrectTab' label='LocalCorrect'><group id='localCorrectGroup' label='Offline EN / DE'><button id='lcCorrect' label='Correct selection / body' size='large' onAction='CorrectAction' screentip='Correct selected prose, or the editable body when nothing is selected'/><button id='lcSettings' label='Settings / Einstellungen' onAction='SettingsAction'/></group></tab></tabs></ribbon></customUI>";
+            } catch (Exception ex) { StartupLog.Write("GetCustomUI " + ex); return null; }
+        }
+        public void CorrectAction(object control) { Guard("CorrectAction", () => Correct(false)); }
+        public void SettingsAction(object control) { Guard("SettingsAction", () => { try { window?.Unregister(); } catch { } if (settings == null) settings = Settings.Load(); settings.Show(); UpdateHotkey(); }); }
+        Task<Corrector> StartEngine() {
+            lock (engineGate) {
+                if (engine != null && (engine.IsFaulted || engine.IsCanceled)) StartupLog.Write("engine retry " + (engine.Exception == null ? "canceled" : engine.Exception.GetBaseException().Message));
+                if (engine == null || engine.IsFaulted || engine.IsCanceled)
+                    engine = Task.Run((Func<Corrector>)LoadEngine);
+                return engine;
+            }
+        }
+        static Corrector LoadEngine() {
+            StartupLog.Write("word lists loading thread " + System.Threading.Thread.CurrentThread.ManagedThreadId);
+            try {
+                var loaded = Corrector.FromEmbeddedData();
+                StartupLog.Write("word lists ready");
+                return loaded;
+            } catch (Exception ex) { StartupLog.Write("word lists failed " + ex); throw; }
+        }
         void UpdateHotkey() {
-            try { dynamic inspector, doc; IntPtr hwnd; bool active = TryTarget(out inspector, out doc, out hwnd); window?.Update(active && !busy && HotkeyWindow.IsEditorFocused(hwnd), settings); }
-            catch { window?.Unregister(); }
+            try {
+                if (disconnected) return;
+                if (settings == null) settings = Settings.Load();
+                if (window == null) window = new HotkeyWindow(() => Correct(true));
+                dynamic inspector, doc; IntPtr hwnd; bool active = TryTarget(out inspector, out doc, out hwnd);
+                window.Update(active && !busy && HotkeyWindow.IsEditorFocused(hwnd), settings);
+            } catch (Exception ex) { StartupLog.Write("UpdateHotkey " + ex.GetType().Name + ": " + ex.Message); try { window?.Unregister(); } catch { } }
         }
         bool TryTarget(out dynamic inspector, out dynamic doc, out IntPtr hwnd) {
             inspector = null; doc = null; hwnd = IntPtr.Zero;
@@ -77,8 +117,9 @@ namespace LocalCorrect.Outlook {
                 // Whole body: stop at the quoted earlier message of a reply or forward.
                 if (whole) { int cut = Mail.ReplyStart(Normalized(source)); if (cut >= 0) source = source.Substring(0, cut); }
                 if (source.Length > 50000) throw new InvalidOperationException("The text is too long. Select at most 50,000 characters.");
+                if (settings == null) settings = Settings.Load();
                 string language = settings.Language;
-                busy = true; window.Unregister();
+                busy = true; try { window?.Unregister(); } catch { }
                 // No Office COM object crosses to the worker. All editor operations stay on the Office UI thread.
                 var result = await RunEngine(Normalized(source), language);
                 if (disconnected) return;
@@ -115,8 +156,7 @@ namespace LocalCorrect.Outlook {
             // WinForms context keeps the caller's continuation on the Office UI thread.
             if (System.Threading.SynchronizationContext.Current == null)
                 System.Threading.SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
-            if (engine.IsFaulted) engine = Task.Run(() => Corrector.FromEmbeddedData()); // retry a failed load
-            var loading = engine;
+            var loading = StartEngine();
             return Task.Run(() => loading.Result.Correct(source, language));
         }
         static bool InsideWord(string text, int position) {
@@ -144,7 +184,26 @@ namespace LocalCorrect.Outlook {
             if (ex is InvalidOperationException || ex is ArgumentException) return ex.Message;
             return "The editor could not complete this operation. Try a smaller selection. Review the message before sending.";
         }
-        static void Info(string text) { MessageBox.Show(text, "LocalCorrect", MessageBoxButtons.OK, MessageBoxIcon.Information); }
+        static void Info(string text) { try { MessageBox.Show(text, "LocalCorrect", MessageBoxButtons.OK, MessageBoxIcon.Information); } catch (Exception ex) { StartupLog.Write("dialog " + ex.Message); } }
+        static void Guard(string name, Action action) { try { action(); } catch (Exception ex) { StartupLog.Write(name + " " + ex); } }
+        static string SafeLocation() { try { return typeof(AddIn).Assembly.Location; } catch { return "unknown location"; } }
+    }
+    static class StartupLog {
+        static readonly object Gate = new object();
+        static string previous;
+        internal static void Write(string message) {
+            try {
+                lock (Gate) {
+                    if (message == previous) return;
+                    previous = message;
+                    string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalCorrect", "Outlook");
+                    Directory.CreateDirectory(dir);
+                    string line = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) + " " + message + Environment.NewLine;
+                    File.AppendAllText(Path.Combine(dir, "log.txt"), line);
+                }
+            } catch { }
+        }
+        internal static void Write(Exception ex) { Write(ex == null ? "null exception" : ex.ToString()); }
     }
     internal sealed class HotkeyWindow : Control {
         const int Id = 0x4c43;

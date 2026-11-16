@@ -19,7 +19,7 @@ replaced; they remain as git tags and releases.
    [release](https://github.com/mrksrus/localcorrect-outlook/releases/tag/v2.0.0-rc.2), unzip it
    and run `LocalCorrect-Outlook-Setup.exe`. It installs for your Windows user only (no admin
    rights) under `%LOCALAPPDATA%\LocalCorrect\Outlook`.
-3. Start Outlook.
+3. Start Outlook. If Outlook had blocked LocalCorrect after a previous start, setup clears that block for this add-in only. Failures during startup are written to `%LOCALAPPDATA%\LocalCorrect\Outlook\log.txt`.
 
 Needs .NET Framework 4.8 (included in current Windows 10/11). The installer is unsigned, so
 Windows SmartScreen may warn; Office policies that allow only signed add-ins will block it.

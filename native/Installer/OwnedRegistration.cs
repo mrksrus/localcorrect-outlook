@@ -18,7 +18,9 @@ namespace LocalCorrect.Setup {
         internal interface IHive {
             bool Exists(string path);
             object GetValue(string path, string name);
+            string[] GetValueNames(string path);
             void SetValue(string path, string name, object value, bool dword);
+            void DeleteValue(string path, string name);
             void DeleteTree(string path);
         }
         internal sealed class HiveSlot {
@@ -50,6 +52,17 @@ namespace LocalCorrect.Setup {
                 values.TryGetValue(name ?? "", out value);
                 return value;
             }
+            public string[] GetValueNames(string path) {
+                Dictionary<string, object> values;
+                if (!keys.TryGetValue(Norm(path), out values)) return new string[0];
+                var names = new string[values.Count];
+                values.Keys.CopyTo(names, 0);
+                return names;
+            }
+            public void DeleteValue(string path, string name) {
+                Dictionary<string, object> values;
+                if (keys.TryGetValue(Norm(path), out values)) values.Remove(name ?? "");
+            }
             public void SetValue(string path, string name, object value, bool dword) {
                 path = Norm(path);
                 Dictionary<string, object> values;
@@ -73,6 +86,38 @@ namespace LocalCorrect.Setup {
             // the 32-bit view was rewritten would erase the new registration.
             foreach (var slot in slots) RemoveOwned(slot.Hive, slot.IncludeWowNode);
             foreach (var slot in slots) Write(slot.Hive, facts);
+            foreach (var slot in slots) ClearResiliency(slot.Hive);
+        }
+        // Outlook records a startup failure under Office\16.0\Outlook\Resiliency
+        // and then refuses to load the add-in. Remove only entries that name
+        // our DLL or ProgId. Other products' disabled items stay.
+        internal static void ClearResiliency(IHive hive) {
+            try { ClearResiliencyCore(hive); } catch (Exception) { }
+        }
+        static void ClearResiliencyCore(IHive hive) {
+            foreach (string version in new[] { "14.0", "15.0", "16.0" }) {
+                string root = @"Software\Microsoft\Office\" + version + @"\Outlook\Resiliency\";
+                RemoveOurValues(hive, root + "DisabledItems");
+                RemoveOurValues(hive, root + "CrashingAddinList");
+            }
+        }
+        static void RemoveOurValues(IHive hive, string path) {
+            if (!hive.Exists(path)) return;
+            foreach (string name in hive.GetValueNames(path))
+                if (PointsAtUs(name, hive.GetValue(path, name))) hive.DeleteValue(path, name);
+        }
+        static bool PointsAtUs(string name, object data) {
+            if (Hits(name)) return true;
+            var text = data as string;
+            if (text != null && Hits(text)) return true;
+            var bytes = data as byte[];
+            if (bytes == null) return false;
+            return Hits(Encoding.Unicode.GetString(bytes)) || Hits(Encoding.ASCII.GetString(bytes));
+        }
+        static bool Hits(string text) {
+            if (string.IsNullOrEmpty(text)) return false;
+            return text.IndexOf("localcorrect.outlook.dll", StringComparison.OrdinalIgnoreCase) >= 0
+                || text.IndexOf("localcorrect.outlook.addin", StringComparison.OrdinalIgnoreCase) >= 0;
         }
         internal static List<Conflict> FindConflicts(IHive hive, string viewName, bool includeWowNode) {
             var found = new List<Conflict>();
