@@ -12,7 +12,7 @@ namespace LocalCorrect.Setup {
         internal const string Clsid = "{708F01D3-893E-43D0-8215-61722BC46F23}";
         internal const string ProgId = "LocalCorrect.Outlook.AddIn";
         internal const string Owner = "LocalCorrect.Outlook/708F01D3-893E-43D0-8215-61722BC46F23";
-        internal const string ProductVersion = "2.0.0-rc.2";
+        internal const string ProductVersion = "2.0.0-rc.3";
         internal const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\LocalCorrect.Outlook";
         internal const string OwnerValue = "LocalCorrectOwner";
         internal interface IHive {

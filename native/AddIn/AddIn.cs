@@ -18,20 +18,16 @@ namespace LocalCorrect.Outlook {
         readonly object engineGate = new object();
         bool busy;
         volatile bool disconnected;
-        static AddIn() {
-            try { AppDomain.CurrentDomain.AssemblyResolve += (sender, args) => { if (args.Name == null || args.Name.IndexOf(".resources", StringComparison.OrdinalIgnoreCase) < 0) StartupLog.Write("assembly resolve " + args.Name); return null; }; }
-            catch { }
-        }
-        // OnConnection runs on Outlook's UI thread and is timed. Do not create a
-        // window here (that pumps messages and can re-enter Outlook) and do not
-        // touch the engine type (its static setup and word lists take about a
-        // second). Any exception that escapes is caught by Outlook and recorded
-        // as a crash, with no .NET Runtime event.
+        // Do not subscribe to AppDomain.AssemblyResolve. A handler that runs while
+        // the CLR is still binding this add-in (German satellite probes, dynamic
+        // binder, file logging) re-enters the loader and the Framework 4.8 CLR
+        // dies with 0x80131506 / an access violation in clr.dll. try/catch cannot
+        // stop that. OnConnection and OnStartupComplete also must not touch
+        // Windows Forms or the engine type: those run on Outlook's UI thread.
         public void OnConnection(object app, int connectMode, object addInInst, ref Array custom) {
             Guard("OnConnection", () => {
                 StartupLog.Write("OnConnection begin thread " + System.Threading.Thread.CurrentThread.ManagedThreadId + " " + SafeLocation());
                 application = app; disconnected = false;
-                StartEngine();
                 StartupLog.Write("OnConnection returned");
             });
         }
@@ -42,24 +38,44 @@ namespace LocalCorrect.Outlook {
         public void OnAddInsUpdate(ref Array custom) { }
         public void OnStartupComplete(ref Array custom) {
             Guard("OnStartupComplete", () => {
-                if (settings == null) settings = Settings.Load();
-                if (timer == null) { timer = new Timer { Interval = 250 }; timer.Tick += (s, e) => UpdateHotkey(); timer.Start(); }
+                StartEngine();
                 StartupLog.Write("OnStartupComplete returned");
             });
         }
         public string GetCustomUI(string ribbonId) {
             try {
                 if (ribbonId != "Microsoft.Outlook.Mail.Compose") return null;
+                EnsureUi();
                 return @"<customUI xmlns='http://schemas.microsoft.com/office/2009/07/customui'><ribbon><tabs><tab id='localCorrectTab' label='LocalCorrect'><group id='localCorrectGroup' label='Offline EN / DE'><button id='lcCorrect' label='Correct selection / body' size='large' onAction='CorrectAction' screentip='Correct selected prose, or the editable body when nothing is selected'/><button id='lcSettings' label='Settings / Einstellungen' onAction='SettingsAction'/></group></tab></tabs></ribbon></customUI>";
             } catch (Exception ex) { StartupLog.Write("GetCustomUI " + ex); return null; }
         }
-        public void CorrectAction(object control) { Guard("CorrectAction", () => Correct(false)); }
-        public void SettingsAction(object control) { Guard("SettingsAction", () => { try { window?.Unregister(); } catch { } if (settings == null) settings = Settings.Load(); settings.Show(); UpdateHotkey(); }); }
+        public void CorrectAction(object control) { Guard("CorrectAction", () => { EnsureUi(); Correct(false); }); }
+        public void SettingsAction(object control) { Guard("SettingsAction", () => { EnsureUi(); try { window?.Unregister(); } catch { } settings.Show(); UpdateHotkey(); }); }
+        void EnsureUi() {
+            StartEngine();
+            if (settings == null) settings = Settings.Load();
+            if (timer != null) return;
+            timer = new Timer { Interval = 250 };
+            timer.Tick += (s, e) => UpdateHotkey();
+            timer.Start();
+        }
         Task<Corrector> StartEngine() {
             lock (engineGate) {
                 if (engine != null && (engine.IsFaulted || engine.IsCanceled)) StartupLog.Write("engine retry " + (engine.Exception == null ? "canceled" : engine.Exception.GetBaseException().Message));
-                if (engine == null || engine.IsFaulted || engine.IsCanceled)
-                    engine = Task.Run((Func<Corrector>)LoadEngine);
+                if (engine != null && !engine.IsFaulted && !engine.IsCanceled) return engine;
+                var done = new TaskCompletionSource<Corrector>();
+                engine = done.Task;
+                // A normal thread, not the thread pool: the pool's stack and the
+                // COM-hosted CLR during OnConnection are a bad place to compile
+                // the engine's Unicode regexes and parse the word lists.
+                var thread = new System.Threading.Thread(() => {
+                    try { done.SetResult(LoadEngine()); }
+                    catch (Exception ex) { try { done.TrySetException(ex); } catch { } }
+                }, 4 * 1024 * 1024);
+                thread.IsBackground = true;
+                thread.Name = "LocalCorrect";
+                try { thread.Start(); }
+                catch (Exception ex) { StartupLog.Write("engine thread " + ex); done.TrySetException(ex); }
                 return engine;
             }
         }
@@ -198,7 +214,8 @@ namespace LocalCorrect.Outlook {
                     previous = message;
                     string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalCorrect", "Outlook");
                     Directory.CreateDirectory(dir);
-                    string line = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) + " " + message + Environment.NewLine;
+                    DateTime n = DateTime.UtcNow;
+                string line = n.ToString("yyyy-MM-dd HH:mm:ss.fff", CultureInfo.InvariantCulture) + " " + message + Environment.NewLine;
                     File.AppendAllText(Path.Combine(dir, "log.txt"), line);
                 }
             } catch { }
