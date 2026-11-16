@@ -8,5 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../AddIn/LocalCorrect.Outlook.csproj" />
+    <ProjectReference Include="../ComProbe.Bad/ComProbe.Bad.csproj" />
+    <ProjectReference Include="../ComProbe.RefSafety/ComProbe.RefSafety.csproj" />
   </ItemGroup>
 </Project>

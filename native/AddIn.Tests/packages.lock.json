@@ -16,6 +16,12 @@
         "resolved": "1.0.3",
         "contentHash": "zMk4D+9zyiEWByyQ7oPImPN/Jhpj166Ky0Nlla4eXlNL8hI/BtSJsgR8Inldd4NNpIAH3oh8yym0W2DrhXdSLQ=="
       },
+      "LocalCorrect.ComProbe.Bad": {
+        "type": "Project"
+      },
+      "LocalCorrect.ComProbe.RefSafety": {
+        "type": "Project"
+      },
       "localcorrect.outlook": {
         "type": "Project"
       }

@@ -12,7 +12,7 @@ namespace LocalCorrect.Setup {
         internal const string Clsid = "{708F01D3-893E-43D0-8215-61722BC46F23}";
         internal const string ProgId = "LocalCorrect.Outlook.AddIn";
         internal const string Owner = "LocalCorrect.Outlook/708F01D3-893E-43D0-8215-61722BC46F23";
-        internal const string ProductVersion = "2.0.0-rc.4";
+        internal const string ProductVersion = "2.0.0-rc.5";
         internal const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\LocalCorrect.Outlook";
         internal const string OwnerValue = "LocalCorrectOwner";
         internal interface IHive {
@@ -117,6 +117,7 @@ namespace LocalCorrect.Setup {
                 string root = @"Software\Microsoft\Office\" + version + @"\Outlook\Resiliency\";
                 RemoveOurValues(hive, root + "DisabledItems");
                 RemoveOurValues(hive, root + "CrashingAddinList");
+                RemoveOurValues(hive, root + "StartupItems");
             }
         }
         static void RemoveOurValues(IHive hive, string path) {
@@ -160,7 +161,15 @@ namespace LocalCorrect.Setup {
             hive.SetValue(inproc, "Assembly", facts.AssemblyFullName, false);
             hive.SetValue(inproc, "RuntimeVersion", "v4.0.30319", false);
             hive.SetValue(inproc, "CodeBase", facts.CodeBase, false);
+            // regasm writes the same values under InprocServer32\<assembly version>.
+            string versionKey = inproc + "\\" + AssemblyVersion(facts.AssemblyFullName);
+            hive.SetValue(versionKey, "Class", ProgId, false);
+            hive.SetValue(versionKey, "Assembly", facts.AssemblyFullName, false);
+            hive.SetValue(versionKey, "RuntimeVersion", "v4.0.30319", false);
+            hive.SetValue(versionKey, "CodeBase", facts.CodeBase, false);
             hive.SetValue(clsid + @"\ProgId", "", ProgId, false);
+            // regasm marks the class as a managed COM component. Activation does not require it, and Outlook found the add-in without it; write it so the key matches regasm.
+            hive.SetValue(clsid + @"\Implemented Categories\{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}", "", "", false);
             string prog = @"Software\Classes\" + ProgId;
             hive.SetValue(prog, OwnerValue, Owner, false);
             hive.SetValue(prog + @"\CLSID", "", Clsid, false);
@@ -177,6 +186,15 @@ namespace LocalCorrect.Setup {
             hive.SetValue(UninstallKey, "UninstallString", facts.UninstallString, false);
             hive.SetValue(UninstallKey, "NoModify", 1, true);
             hive.SetValue(UninstallKey, "NoRepair", 1, true);
+        }
+        static string AssemblyVersion(string fullName) {
+            const string marker = "Version=";
+            int start = fullName == null ? -1 : fullName.IndexOf(marker, StringComparison.Ordinal);
+            if (start < 0) return "2.0.0.0";
+            start += marker.Length;
+            int end = fullName.IndexOf(',', start);
+            if (end < 0) end = fullName.Length;
+            return fullName.Substring(start, end - start).Trim();
         }
         internal static string FormatConflict(IReadOnlyList<Conflict> conflicts) {
             var text = new StringBuilder("A conflicting LocalCorrect registration exists. No registry keys were changed.");
