@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -8,9 +9,7 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 namespace LocalCorrect.Setup {
     static class Program {
-        const string Clsid = "{708F01D3-893E-43D0-8215-61722BC46F23}", ProgId = "LocalCorrect.Outlook.AddIn";
-        const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\LocalCorrect.Outlook";
-        const string Owner = "LocalCorrect.Outlook/708F01D3-893E-43D0-8215-61722BC46F23";
+        const string Owner = OwnedRegistration.Owner;
         static readonly string Root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LocalCorrect", "Outlook");
         static readonly string SetupPath = Path.Combine(Root, "LocalCorrect-Outlook-Setup.exe");
         [STAThread] static void Main(string[] args) {
@@ -36,10 +35,7 @@ namespace LocalCorrect.Setup {
         }
         static RegistryView[] Views => Environment.Is64BitOperatingSystem ? new[] { RegistryView.Registry32, RegistryView.Registry64 } : new[] { RegistryView.Registry32 };
         static string Install() {
-            foreach (var view in Views) using (var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view)) {
-                foreach (var key in new[] { @"Software\Classes\CLSID\" + Clsid, @"Software\Classes\" + ProgId, @"Software\Microsoft\Office\Outlook\Addins\" + ProgId, UninstallKey })
-                    using (var existing = hive.OpenSubKey(key)) if (existing != null) throw new InvalidOperationException("A conflicting LocalCorrect registration exists. No registry keys were changed.");
-            }
+            EnsureNoForeignRegistration();
             if (Directory.Exists(Root)) OwnedInstallation.VerifyOwnership(Root, Owner);
             string retained = null;
             string stage = Root + ".stage-" + Guid.NewGuid().ToString("N");
@@ -68,36 +64,73 @@ namespace LocalCorrect.Setup {
                 throw;
             } finally { if (Directory.Exists(stage)) Directory.Delete(stage, true); }
         }
-        static void Register() {
+        static OwnedRegistration.InstallFacts Facts() {
             var identity = AssemblyName.GetAssemblyName(Path.Combine(Root, "LocalCorrect.Outlook.dll"));
-            foreach (var view in Views) using (var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view)) {
-                using (var clsid = hive.CreateSubKey(@"Software\Classes\CLSID\" + Clsid)) {
-                    clsid.SetValue("", ProgId); clsid.SetValue("LocalCorrectOwner", Owner);
-                    using (var inproc = clsid.CreateSubKey("InprocServer32")) {
-                        inproc.SetValue("", "mscoree.dll"); inproc.SetValue("ThreadingModel", "Both"); inproc.SetValue("Class", "LocalCorrect.Outlook.AddIn"); inproc.SetValue("Assembly", identity.FullName); inproc.SetValue("RuntimeVersion", "v4.0.30319"); inproc.SetValue("CodeBase", new Uri(Path.Combine(Root, "LocalCorrect.Outlook.dll")).AbsoluteUri);
-                    }
-                    using (var prog = clsid.CreateSubKey("ProgId")) prog.SetValue("", ProgId);
-                }
-                using (var prog = hive.CreateSubKey(@"Software\Classes\" + ProgId)) { prog.SetValue("LocalCorrectOwner", Owner); using (var c = prog.CreateSubKey("CLSID")) c.SetValue("", Clsid); }
-                using (var addin = hive.CreateSubKey(@"Software\Microsoft\Office\Outlook\Addins\" + ProgId)) {
-                    addin.SetValue("LocalCorrectOwner", Owner); addin.SetValue("FriendlyName", "LocalCorrect offline EN/DE"); addin.SetValue("Description", "Offline, user-triggered selected-prose correction"); addin.SetValue("LoadBehavior", 3, RegistryValueKind.DWord);
-                }
-            }
-            using (var key = Registry.CurrentUser.CreateSubKey(UninstallKey)) {
-                key.SetValue("LocalCorrectOwner", Owner); key.SetValue("DisplayName", "LocalCorrect for classic Outlook"); key.SetValue("DisplayVersion", "2.0.0-rc.1"); key.SetValue("Publisher", "LocalCorrect contributors"); key.SetValue("InstallLocation", Root); key.SetValue("UninstallString", "\"" + SetupPath + "\" /uninstall"); key.SetValue("NoModify", 1); key.SetValue("NoRepair", 1);
-            }
+            return new OwnedRegistration.InstallFacts {
+                Version = OwnedRegistration.ProductVersion,
+                InstallLocation = Root,
+                UninstallString = "\"" + SetupPath + "\" /uninstall",
+                AssemblyFullName = identity.FullName,
+                CodeBase = new Uri(Path.Combine(Root, "LocalCorrect.Outlook.dll")).AbsoluteUri
+            };
+        }
+        static OwnedRegistration.HiveSlot[] OpenSlots() {
+            var slots = new List<OwnedRegistration.HiveSlot>();
+            foreach (var view in Views) slots.Add(new OwnedRegistration.HiveSlot {
+                Hive = new WindowsHive(view),
+                ViewName = view == RegistryView.Registry64 ? "64-bit" : "32-bit",
+                IncludeWowNode = view == RegistryView.Registry64 && Environment.Is64BitOperatingSystem
+            });
+            return slots.ToArray();
+        }
+        static void Close(OwnedRegistration.HiveSlot[] slots) {
+            foreach (var slot in slots) { var hive = slot.Hive as IDisposable; if (hive != null) hive.Dispose(); }
+        }
+        static void EnsureNoForeignRegistration() {
+            var slots = OpenSlots();
+            try {
+                var conflicts = new List<OwnedRegistration.Conflict>();
+                foreach (var slot in slots) conflicts.AddRange(OwnedRegistration.FindConflicts(slot.Hive, slot.ViewName, slot.IncludeWowNode));
+                if (conflicts.Count != 0) throw new InvalidOperationException(OwnedRegistration.FormatConflict(conflicts));
+            } finally { Close(slots); }
+        }
+        static void Register() {
+            var slots = OpenSlots();
+            try { OwnedRegistration.Replace(slots, Facts()); }
+            finally { Close(slots); }
         }
         static void RemoveOwnedRegistrations() {
-            foreach (var view in Views) using (var hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view))
-                foreach (var path in new[] { @"Software\Classes\CLSID\" + Clsid, @"Software\Classes\" + ProgId, @"Software\Microsoft\Office\Outlook\Addins\" + ProgId, UninstallKey }) {
-                    bool owned; using (var key = hive.OpenSubKey(path)) owned = (string)key?.GetValue("LocalCorrectOwner") == Owner;
-                    if (owned) hive.DeleteSubKeyTree(path, false);
-                }
+            var slots = OpenSlots();
+            try { foreach (var slot in slots) OwnedRegistration.RemoveOwned(slot.Hive, slot.IncludeWowNode); }
+            finally { Close(slots); }
         }
         static void Uninstall() {
-            OwnedInstallation.VerifyOwnership(Root, Owner);
-            RemoveOwnedRegistrations(); DeleteOwnedFiles();
+            // Registry ownership is stamped on the keys themselves, so remove
+            // those even when the install folder is already gone. Files are
+            // deleted only after the folder's own ownership check.
+            RemoveOwnedRegistrations();
+            if (!Directory.Exists(Root)) return;
+            try { OwnedInstallation.VerifyOwnership(Root, Owner); }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is InvalidDataException) {
+                throw new InvalidOperationException("LocalCorrect's registration was removed. The installation folder was left in place because its ownership could not be verified.");
+            }
+            DeleteOwnedFiles();
         }
         static void DeleteOwnedFiles() { OwnedInstallation.DeleteOwnedFiles(Root, Owner); }
+        sealed class WindowsHive : OwnedRegistration.IHive, IDisposable {
+            readonly RegistryKey hive;
+            public WindowsHive(RegistryView view) { hive = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view); }
+            public void Dispose() { hive.Dispose(); }
+            public bool Exists(string path) { using (var key = hive.OpenSubKey(path)) return key != null; }
+            public object GetValue(string path, string name) { using (var key = hive.OpenSubKey(path)) return key == null ? null : key.GetValue(name ?? ""); }
+            public void SetValue(string path, string name, object value, bool dword) {
+                using (var key = hive.CreateSubKey(path)) {
+                    if (key == null) throw new InvalidOperationException("Could not create HKCU\\" + path);
+                    if (dword) key.SetValue(name ?? "", value, RegistryValueKind.DWord);
+                    else key.SetValue(name ?? "", value, RegistryValueKind.String);
+                }
+            }
+            public void DeleteTree(string path) { hive.DeleteSubKeyTree(path, false); }
+        }
     }
 }
