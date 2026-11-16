@@ -168,6 +168,8 @@ namespace LocalCorrect.Setup {
             hive.SetValue(versionKey, "RuntimeVersion", "v4.0.30319", false);
             hive.SetValue(versionKey, "CodeBase", facts.CodeBase, false);
             hive.SetValue(clsid + @"\ProgId", "", ProgId, false);
+            // regasm marks the class as a managed COM component. Activation does not require it, and Outlook found the add-in without it; write it so the key matches regasm.
+            hive.SetValue(clsid + @"\Implemented Categories\{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}", "", "", false);
             string prog = @"Software\Classes\" + ProgId;
             hive.SetValue(prog, OwnerValue, Owner, false);
             hive.SetValue(prog + @"\CLSID", "", Clsid, false);

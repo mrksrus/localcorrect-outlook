@@ -98,6 +98,7 @@ try {
             && (string)hive.GetValue(inprocPath + @"\2.0.0.0", "Assembly") == facts.AssemblyFullName
             && (string)hive.GetValue(inprocPath + @"\2.0.0.0", "RuntimeVersion") == "v4.0.30319"
             && (string)hive.GetValue(inprocPath + @"\2.0.0.0", "CodeBase") == facts.CodeBase
+            && hive.Exists(clsidPath + @"\Implemented Categories\{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}")
             && (string)hive.GetValue(progPath + @"\CLSID", "") == OwnedRegistration.Clsid
             && (int)hive.GetValue(addinPath, "LoadBehavior") == 3
             && (int)hive.GetValue(OwnedRegistration.UninstallKey, "NoModify") == 1;

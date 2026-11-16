@@ -87,28 +87,40 @@ class Program {
         string refsafety = Path.Combine(probeRoot, "LocalCorrect.ComProbe.RefSafety.dll");
         ShowRegAsm(product);
         int refCode = -1, badCode = -1, productCode = -1;
+        var hive = RegistryHive.CurrentUser;
         try {
-            Register(RefClsid, "LocalCorrect.ComProbe.ProbeRefSafety", refsafety, false);
+            Register(hive, RefClsid, "LocalCorrect.ComProbe.ProbeRefSafety", refsafety, false);
             refCode = RunChild("refsafety");
-            Console.WriteLine("PROBE refsafety exit " + Hex(refCode));
-            Register(BadClsid, "LocalCorrect.ComProbe.BadAddIn", bad, false);
+            Console.WriteLine("PROBE refsafety " + hive + " exit " + Hex(refCode));
+            // This runner's COM lookup returns 80070002 for a complete HKCU
+            // CodeBase registration even though the file is there. HKLM is the
+            // same mscoree path Outlook uses once it has found the DLL.
+            if (refCode == 1) {
+                hive = RegistryHive.LocalMachine;
+                Console.WriteLine("HKCU activation did not load the file; retrying HKLM");
+                try { Register(hive, RefClsid, "LocalCorrect.ComProbe.ProbeRefSafety", refsafety, false); }
+                catch (Exception ex) { Console.Error.WriteLine(ex); return 8; }
+                refCode = RunChild("refsafety");
+                Console.WriteLine("PROBE refsafety " + hive + " exit " + Hex(refCode));
+            }
+            Register(hive, BadClsid, "LocalCorrect.ComProbe.BadAddIn", bad, true);
             badCode = RunChild("bad");
-            Console.WriteLine("PROBE old-interface exit " + Hex(badCode));
-            Register(ProductClsid, "LocalCorrect.Outlook.AddIn", product, false);
-            int plainCode = RunChild("product");
-            Console.WriteLine("PROBE product-no-version-subkey exit " + Hex(plainCode));
-            Register(ProductClsid, "LocalCorrect.Outlook.AddIn", product, true);
+            Console.WriteLine("PROBE old-interface " + hive + " exit " + Hex(badCode));
+            Register(hive, ProductClsid, "LocalCorrect.Outlook.AddIn", product, true);
             try { if (File.Exists(LogPath())) File.Delete(LogPath()); }
             catch (Exception ex) { Console.Error.WriteLine(ex); return 8; }
             if (File.Exists(LogPath())) { Console.Error.WriteLine("could not reset log.txt"); return 8; }
             productCode = RunChild("product");
-            Console.WriteLine("PROBE product exit " + Hex(productCode));
+            Console.WriteLine("PROBE product " + hive + " exit " + Hex(productCode));
             string log = File.Exists(LogPath()) ? File.ReadAllText(LogPath()) : "";
             Console.WriteLine("PROBE product log " + (log.Length == 0 ? "(none)" : log.Replace("\r", " ").Replace("\n", " | ")));
         } finally {
-            Delete(RefClsid);
-            Delete(BadClsid);
-            Delete(ProductClsid);
+            Delete(RegistryHive.CurrentUser, RefClsid);
+            Delete(RegistryHive.CurrentUser, BadClsid);
+            Delete(RegistryHive.CurrentUser, ProductClsid);
+            Delete(RegistryHive.LocalMachine, RefClsid);
+            Delete(RegistryHive.LocalMachine, BadClsid);
+            Delete(RegistryHive.LocalMachine, ProductClsid);
         }
         if (productCode != 0) { Console.Error.WriteLine("COM activation of LocalCorrect.Outlook failed"); return 8; }
         string written = File.Exists(LogPath()) ? File.ReadAllText(LogPath()) : "";
@@ -155,12 +167,12 @@ class Program {
         }
     }
 
-    static void Register(string clsid, string className, string dll, bool versionSubkey) {
+    static void Register(RegistryHive hive, string clsid, string className, string dll, bool versionSubkey) {
         var identity = AssemblyName.GetAssemblyName(dll);
         string codeBase = new Uri(dll).AbsoluteUri;
-        Console.WriteLine("register " + clsid + " " + identity.FullName + " " + codeBase + " exists=" + File.Exists(dll) + (versionSubkey ? " +version" : ""));
+        Console.WriteLine("register " + hive + " " + clsid + " " + identity.FullName + " " + codeBase + " exists=" + File.Exists(dll) + (versionSubkey ? " +version" : ""));
         foreach (RegistryView view in Views()) {
-            using (var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view)) {
+            using (var root = RegistryKey.OpenBaseKey(hive, view)) {
                 string key = @"Software\Classes\CLSID\" + clsid;
                 string inproc = key + @"\InprocServer32";
                 Put(root, key, "", className);
@@ -171,6 +183,8 @@ class Program {
                 Put(root, inproc, "RuntimeVersion", "v4.0.30319");
                 Put(root, inproc, "CodeBase", codeBase);
                 Put(root, key + @"\ProgId", "", className);
+                Put(root, key + @"\Implemented Categories\{62C8FE65-4EBB-45e7-B440-6E39B2CDBF29}", "", "");
+                Put(root, @"Software\Classes\" + className + @"\CLSID", "", clsid);
                 if (!versionSubkey) continue;
                 string sub = inproc + "\\" + identity.Version;
                 Put(root, sub, "Class", className);
@@ -182,13 +196,17 @@ class Program {
     }
 
     static void DumpClsid(string clsid) {
+        foreach (RegistryHive hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
         foreach (RegistryView view in Views()) {
-            using (var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view)) {
+            RegistryKey root;
+            try { root = RegistryKey.OpenBaseKey(hive, view); }
+            catch (Exception ex) { Console.WriteLine("child " + hive + " " + view + " " + ex.GetType().Name); continue; }
+            using (root) {
                 string inproc = @"Software\Classes\CLSID\" + clsid + @"\InprocServer32";
                 using (var key = root.OpenSubKey(inproc)) {
-                    if (key == null) { Console.WriteLine("child " + view + " InprocServer32 missing"); continue; }
+                    if (key == null) { Console.WriteLine("child " + hive + " " + view + " InprocServer32 missing"); continue; }
                     string code = key.GetValue("CodeBase") as string;
-                    Console.WriteLine("child " + view + " default=" + key.GetValue("") + " class=" + key.GetValue("Class") + " assembly=" + key.GetValue("Assembly") + " runtime=" + key.GetValue("RuntimeVersion") + " code=" + code);
+                    Console.WriteLine("child " + hive + " " + view + " default=" + key.GetValue("") + " class=" + key.GetValue("Class") + " code=" + code);
                     if (!string.IsNullOrEmpty(code)) {
                         try { Console.WriteLine("child file exists=" + File.Exists(new Uri(code).LocalPath)); }
                         catch (Exception ex) { Console.WriteLine("child codebase " + ex.Message); }
@@ -218,11 +236,13 @@ class Program {
         using (var key = root.CreateSubKey(path)) key.SetValue(name, value);
     }
 
-    static void Delete(string clsid) {
+    static void Delete(RegistryHive hive, string clsid) {
         foreach (RegistryView view in Views()) {
-            using (var root = RegistryKey.OpenBaseKey(RegistryHive.CurrentUser, view)) {
-                try { root.DeleteSubKeyTree(@"Software\Classes\CLSID\" + clsid, false); } catch { }
-            }
+            try {
+                using (var root = RegistryKey.OpenBaseKey(hive, view)) {
+                    try { root.DeleteSubKeyTree(@"Software\Classes\CLSID\" + clsid, false); } catch { }
+                }
+            } catch (Exception ex) { Console.WriteLine("delete " + hive + " " + ex.GetType().Name); }
         }
     }
 
