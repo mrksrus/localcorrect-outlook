@@ -59,5 +59,155 @@ try {
     File.AppendAllText(Path.Combine(traversal, "installed-files.sha256"), OwnedInstallation.Hash(outside) + "  ../outside.txt\n");
     Refuses(() => OwnedInstallation.DeleteOwnedFiles(traversal, Owner));
     Assert(File.ReadAllText(outside) == "outside" && File.Exists(Path.Combine(traversal, "owned.dll")), "Invalid inventory caused partial deletion"); passed++;
-    Console.WriteLine($"PASS {passed} installer filesystem ownership/retry/reinstall cases");
+
+    string clsidPath = @"Software\Classes\CLSID\" + OwnedRegistration.Clsid;
+    string progPath = @"Software\Classes\" + OwnedRegistration.ProgId;
+    string addinPath = @"Software\Microsoft\Office\Outlook\Addins\" + OwnedRegistration.ProgId;
+    string inprocPath = clsidPath + @"\InprocServer32";
+    string wowClsid = @"Software\Classes\Wow6432Node\CLSID\" + OwnedRegistration.Clsid;
+    var facts = new OwnedRegistration.InstallFacts {
+        Version = OwnedRegistration.ProductVersion, InstallLocation = @"C:\Users\Sam\AppData\Local\LocalCorrect\Outlook",
+        UninstallString = "\"C:\\Users\\Sam\\AppData\\Local\\LocalCorrect\\Outlook\\LocalCorrect-Outlook-Setup.exe\" /uninstall",
+        AssemblyFullName = "LocalCorrect.Outlook, Version=2.0.0.0, Culture=neutral, PublicKeyToken=null",
+        CodeBase = "file:///C:/Users/Sam/AppData/Local/LocalCorrect/Outlook/LocalCorrect.Outlook.dll"
+    };
+    void SeedV1(OwnedRegistration.IHive hive, string version) {
+        hive.SetValue(clsidPath, "", OwnedRegistration.ProgId, false);
+        hive.SetValue(clsidPath, OwnedRegistration.OwnerValue, OwnedRegistration.Owner, false);
+        hive.SetValue(inprocPath, "", "mscoree.dll", false);
+        hive.SetValue(inprocPath, "Class", OwnedRegistration.ProgId, false);
+        hive.SetValue(inprocPath, "Assembly", "LocalCorrect.Outlook, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", false);
+        hive.SetValue(inprocPath, "CodeBase", "file:///C:/Users/Sam/AppData/Local/LocalCorrect/Outlook/LocalCorrect.Outlook.dll", false);
+        hive.SetValue(progPath, OwnedRegistration.OwnerValue, OwnedRegistration.Owner, false);
+        hive.SetValue(progPath + @"\CLSID", "", OwnedRegistration.Clsid, false);
+        hive.SetValue(addinPath, OwnedRegistration.OwnerValue, OwnedRegistration.Owner, false);
+        hive.SetValue(addinPath, "FriendlyName", "LocalCorrect offline EN/DE", false);
+        hive.SetValue(addinPath, "LoadBehavior", 3, true);
+        hive.SetValue(OwnedRegistration.UninstallKey, OwnedRegistration.OwnerValue, OwnedRegistration.Owner, false);
+        hive.SetValue(OwnedRegistration.UninstallKey, "DisplayName", "LocalCorrect for classic Outlook", false);
+        hive.SetValue(OwnedRegistration.UninstallKey, "DisplayVersion", version, false);
+        hive.SetValue(OwnedRegistration.UninstallKey, "UninstallString", facts.UninstallString, false);
+    }
+    bool Registered(OwnedRegistration.IHive hive) {
+        return (string)hive.GetValue(OwnedRegistration.UninstallKey, "DisplayVersion") == OwnedRegistration.ProductVersion
+            && (string)hive.GetValue(clsidPath, OwnedRegistration.OwnerValue) == OwnedRegistration.Owner
+            && (string)hive.GetValue(inprocPath, "Assembly") == facts.AssemblyFullName
+            && (string)hive.GetValue(inprocPath, "CodeBase") == facts.CodeBase
+            && (string)hive.GetValue(progPath + @"\CLSID", "") == OwnedRegistration.Clsid
+            && (int)hive.GetValue(addinPath, "LoadBehavior") == 3
+            && (int)hive.GetValue(OwnedRegistration.UninstallKey, "NoModify") == 1;
+    }
+    void ClearRegistration(OwnedRegistration.IHive hive, bool wow) { OwnedRegistration.RemoveOwned(hive, wow); }
+
+    var fromV1_32 = new OwnedRegistration.MemoryHive();
+    var fromV1_64 = new OwnedRegistration.MemoryHive();
+    SeedV1(fromV1_32, "1.0.0-rc.3");
+    SeedV1(fromV1_64, "1.0.0-rc.6");
+    fromV1_32.SetValue(@"Software\Classes\CLSID\{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}", "", "Other.AddIn", false);
+    fromV1_64.SetValue(@"Software\Microsoft\Office\Outlook\Addins\Other.AddIn", "FriendlyName", "Other", false);
+    var upgrade = new[] {
+        new OwnedRegistration.HiveSlot { Hive = fromV1_32, ViewName = "32-bit", IncludeWowNode = false },
+        new OwnedRegistration.HiveSlot { Hive = fromV1_64, ViewName = "64-bit", IncludeWowNode = true }
+    };
+    OwnedRegistration.Replace(upgrade, facts);
+    Assert(Registered(fromV1_32) && Registered(fromV1_64), "Upgrade from v1 did not rewrite both views");
+    Assert((string)fromV1_32.GetValue(@"Software\Classes\CLSID\{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}", "") == "Other.AddIn", "Upgrade removed an unrelated class");
+    Assert((string)fromV1_64.GetValue(@"Software\Microsoft\Office\Outlook\Addins\Other.AddIn", "FriendlyName") == "Other", "Upgrade removed an unrelated add-in");
+    ClearRegistration(fromV1_32, false); ClearRegistration(fromV1_64, true);
+    Assert(!fromV1_32.Exists(clsidPath) && !fromV1_32.Exists(inprocPath) && !fromV1_32.Exists(progPath) && !fromV1_32.Exists(addinPath) && !fromV1_32.Exists(OwnedRegistration.UninstallKey), "Uninstall left a 32-bit key");
+    Assert(!fromV1_64.Exists(clsidPath) && !fromV1_64.Exists(progPath) && !fromV1_64.Exists(addinPath) && !fromV1_64.Exists(OwnedRegistration.UninstallKey), "Uninstall left a 64-bit key");
+    Assert(fromV1_32.Exists(@"Software\Classes\CLSID\{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}") && fromV1_64.Exists(@"Software\Microsoft\Office\Outlook\Addins\Other.AddIn"), "Uninstall removed an unrelated key"); passed++;
+
+    var again32 = new OwnedRegistration.MemoryHive();
+    var again64 = new OwnedRegistration.MemoryHive();
+    var reinstall = new[] {
+        new OwnedRegistration.HiveSlot { Hive = again32, ViewName = "32-bit", IncludeWowNode = false },
+        new OwnedRegistration.HiveSlot { Hive = again64, ViewName = "64-bit", IncludeWowNode = true }
+    };
+    OwnedRegistration.Replace(reinstall, facts);
+    facts.Version = OwnedRegistration.ProductVersion;
+    OwnedRegistration.Replace(reinstall, facts);
+    Assert(Registered(again32) && Registered(again64), "Reinstall over v2 did not keep a LocalCorrect registration");
+    ClearRegistration(again32, false); ClearRegistration(again64, true);
+    Assert(!again32.Exists(clsidPath) && !again64.Exists(wowClsid) && !again64.Exists(clsidPath), "Reinstall cleanup left a class key"); passed++;
+
+    var shared = new OwnedRegistration.MemoryHive();
+    var sharedSlots = new[] {
+        new OwnedRegistration.HiveSlot { Hive = shared, ViewName = "32-bit", IncludeWowNode = false },
+        new OwnedRegistration.HiveSlot { Hive = shared, ViewName = "64-bit", IncludeWowNode = false }
+    };
+    OwnedRegistration.Replace(sharedSlots, facts);
+    Assert(Registered(shared), "Shared registry view was not registered");
+    OwnedRegistration.RemoveOwned(shared, false);
+    Assert(!shared.Exists(OwnedRegistration.UninstallKey) && !shared.Exists(clsidPath), "Shared key survived removal"); passed++;
+
+    var bit32 = new OwnedRegistration.MemoryHive();
+    var bit64native = new OwnedRegistration.MemoryHive();
+    var bit64 = new WowAliasHive(bit64native, bit32);
+    SeedV1(bit32, "1.0.0-rc.5");
+    var views = new[] {
+        new OwnedRegistration.HiveSlot { Hive = bit32, ViewName = "32-bit", IncludeWowNode = false },
+        new OwnedRegistration.HiveSlot { Hive = bit64, ViewName = "64-bit", IncludeWowNode = true }
+    };
+    OwnedRegistration.Replace(views, facts);
+    Assert(Registered(bit32) && Registered(bit64native), "32-bit class key was erased by Wow6432Node cleanup");
+    Assert((string)bit64.GetValue(wowClsid, OwnedRegistration.OwnerValue) == OwnedRegistration.Owner, "32-bit class key is not visible at Wow6432Node");
+    OwnedRegistration.RemoveOwned(bit64, true); OwnedRegistration.RemoveOwned(bit32, false);
+    Assert(!bit32.Exists(clsidPath) && !bit64.Exists(wowClsid), "Uninstall left the 32-bit class key"); passed++;
+
+    var stampedOnly = new OwnedRegistration.MemoryHive();
+    stampedOnly.SetValue(clsidPath, "", OwnedRegistration.ProgId, false);
+    stampedOnly.SetValue(inprocPath, "Class", OwnedRegistration.ProgId, false);
+    stampedOnly.SetValue(inprocPath, "CodeBase", "file:///C:/Users/Sam/AppData/Local/LocalCorrect/Outlook/LocalCorrect.Outlook.dll", false);
+    stampedOnly.SetValue(progPath + @"\CLSID", "", OwnedRegistration.Clsid.ToLowerInvariant(), false);
+    stampedOnly.SetValue(addinPath, "Description", "Offline, user-triggered selected-prose correction", false);
+    stampedOnly.SetValue(OwnedRegistration.UninstallKey, "UninstallString", facts.UninstallString, false);
+    var unstamped = new[] { new OwnedRegistration.HiveSlot { Hive = stampedOnly, ViewName = "32-bit", IncludeWowNode = false } };
+    OwnedRegistration.Replace(unstamped, facts);
+    Assert(Registered(stampedOnly), "Registration without LocalCorrectOwner was not recognized as LocalCorrect"); passed++;
+
+    var foreign32 = new OwnedRegistration.MemoryHive();
+    var foreign64 = new OwnedRegistration.MemoryHive();
+    SeedV1(foreign32, "1.0.0-rc.4");
+    foreign64.SetValue(clsidPath, "", "Contoso.Mail.AddIn", false);
+    foreign64.SetValue(clsidPath, OwnedRegistration.OwnerValue, "Contoso", false);
+    foreign64.SetValue(inprocPath, "Class", "Contoso.Mail.AddIn", false);
+    string preserved = (string)foreign32.GetValue(OwnedRegistration.UninstallKey, "DisplayVersion");
+    string message = null;
+    try { OwnedRegistration.Replace(new[] {
+        new OwnedRegistration.HiveSlot { Hive = foreign32, ViewName = "32-bit", IncludeWowNode = false },
+        new OwnedRegistration.HiveSlot { Hive = foreign64, ViewName = "64-bit", IncludeWowNode = true }
+    }, facts); }
+    catch (InvalidOperationException ex) { message = ex.Message; }
+    Assert(message != null && message.Contains("No registry keys were changed") && message.Contains("64-bit") && message.Contains(clsidPath) && message.Contains("Contoso") && message.Contains("delete"), "Conflict did not name the key or what to do");
+    Assert((string)foreign32.GetValue(OwnedRegistration.UninstallKey, "DisplayVersion") == preserved, "A foreign key caused LocalCorrect's other view to be rewritten");
+    Assert((string)foreign64.GetValue(clsidPath, OwnedRegistration.OwnerValue) == "Contoso" && (string)foreign64.GetValue(inprocPath, "Class") == "Contoso.Mail.AddIn", "A foreign registration was overwritten"); passed++;
+
+    var empty = new OwnedRegistration.MemoryHive();
+    empty.SetValue(addinPath, "LoadBehavior", 2, true);
+    string emptyMessage = null;
+    try { OwnedRegistration.Replace(new[] { new OwnedRegistration.HiveSlot { Hive = empty, ViewName = "32-bit", IncludeWowNode = false } }, facts); }
+    catch (InvalidOperationException ex) { emptyMessage = ex.Message; }
+    Assert(emptyMessage != null && emptyMessage.Contains(addinPath) && emptyMessage.Contains("absent") && (int)empty.GetValue(addinPath, "LoadBehavior") == 2, "An unidentified add-in key was replaced"); passed++;
+
+    Console.WriteLine($"PASS {passed} installer filesystem and registration ownership cases");
 } finally { Directory.Delete(testRoot, true); }
+
+sealed class WowAliasHive : OwnedRegistration.IHive {
+    readonly OwnedRegistration.MemoryHive native, bit32;
+    public WowAliasHive(OwnedRegistration.MemoryHive native, OwnedRegistration.MemoryHive bit32) { this.native = native; this.bit32 = bit32; }
+    // HKCU\Software\Classes\Wow6432Node is the physical 32-bit Classes view.
+    OwnedRegistration.IHive Map(string path, out string mapped) {
+        const string root = @"Software\Classes\Wow6432Node";
+        if (path.Equals(root, StringComparison.OrdinalIgnoreCase) || path.StartsWith(root + "\\", StringComparison.OrdinalIgnoreCase)) {
+            string rest = path.Length == root.Length ? "" : path.Substring(root.Length + 1);
+            mapped = @"Software\Classes" + (rest.Length == 0 ? "" : "\\" + rest);
+            return bit32;
+        }
+        mapped = path; return native;
+    }
+    public bool Exists(string path) { string mapped; return Map(path, out mapped).Exists(mapped); }
+    public object GetValue(string path, string name) { string mapped; return Map(path, out mapped).GetValue(mapped, name); }
+    public void SetValue(string path, string name, object value, bool dword) { string mapped; Map(path, out mapped).SetValue(mapped, name, value, dword); }
+    public void DeleteTree(string path) { string mapped; Map(path, out mapped).DeleteTree(mapped); }
+}
