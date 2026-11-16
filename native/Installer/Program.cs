@@ -101,7 +101,7 @@ namespace LocalCorrect.Setup {
         }
         static void RemoveOwnedRegistrations() {
             var slots = OpenSlots();
-            try { foreach (var slot in slots) OwnedRegistration.RemoveOwned(slot.Hive, slot.IncludeWowNode); }
+            try { foreach (var slot in slots) { OwnedRegistration.RemoveOwned(slot.Hive, slot.IncludeWowNode); OwnedRegistration.ClearResiliency(slot.Hive); } }
             finally { Close(slots); }
         }
         static void Uninstall() {
@@ -123,6 +123,8 @@ namespace LocalCorrect.Setup {
             public void Dispose() { hive.Dispose(); }
             public bool Exists(string path) { using (var key = hive.OpenSubKey(path)) return key != null; }
             public object GetValue(string path, string name) { using (var key = hive.OpenSubKey(path)) return key == null ? null : key.GetValue(name ?? ""); }
+            public string[] GetValueNames(string path) { using (var key = hive.OpenSubKey(path)) return key == null ? new string[0] : key.GetValueNames(); }
+            public void DeleteValue(string path, string name) { using (var key = hive.OpenSubKey(path, true)) if (key != null) key.DeleteValue(name ?? "", false); }
             public void SetValue(string path, string name, object value, bool dword) {
                 using (var key = hive.CreateSubKey(path)) {
                     if (key == null) throw new InvalidOperationException("Could not create HKCU\\" + path);

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Text;
 using LocalCorrect.Setup;
 
 const string Owner = "synthetic-owner";
@@ -190,6 +191,21 @@ try {
     catch (InvalidOperationException ex) { emptyMessage = ex.Message; }
     Assert(emptyMessage != null && emptyMessage.Contains(addinPath) && emptyMessage.Contains("absent") && (int)empty.GetValue(addinPath, "LoadBehavior") == 2, "An unidentified add-in key was replaced"); passed++;
 
+    var resiliency = new OwnedRegistration.MemoryHive();
+    string disabled = @"Software\Microsoft\Office\16.0\Outlook\Resiliency\DisabledItems";
+    string crashing = @"Software\Microsoft\Office\16.0\Outlook\Resiliency\CrashingAddinList";
+    byte[] ourDisabled = Encoding.Unicode.GetBytes("\u0001\u0000\u0000\u0000C:\\Users\\Sam\\AppData\\Local\\LocalCorrect\\Outlook\\LocalCorrect.Outlook.dll\u0000LocalCorrect.Outlook.AddIn");
+    byte[] otherDisabled = Encoding.Unicode.GetBytes("C:\\Program Files\\Contoso\\Contoso.Outlook.dll");
+    resiliency.SetValue(disabled, "1", ourDisabled, false);
+    resiliency.SetValue(disabled, "2", otherDisabled, false);
+    resiliency.SetValue(crashing, @"c:\users\sam\appdata\local\localcorrect\outlook\localcorrect.outlook.dll", new byte[] { 1, 2, 3, 4, 5, 6, 7, 8 }, false);
+    resiliency.SetValue(crashing, @"C:\Program Files\Contoso\Contoso.Outlook.dll", new byte[] { 1 }, false);
+    resiliency.SetValue(@"Software\Microsoft\Office\15.0\Outlook\Resiliency\DisabledItems", "9", Encoding.ASCII.GetBytes("LocalCorrect.Outlook.AddIn"), false);
+    OwnedRegistration.ClearResiliency(resiliency);
+    Assert(resiliency.GetValue(disabled, "1") == null && resiliency.GetValue(crashing, @"c:\users\sam\appdata\local\localcorrect\outlook\localcorrect.outlook.dll") == null, "Outlook resiliency entries for LocalCorrect were kept");
+    Assert(resiliency.GetValue(disabled, "2") != null && resiliency.GetValue(crashing, @"C:\Program Files\Contoso\Contoso.Outlook.dll") != null, "Another product's resiliency entry was removed");
+    Assert(resiliency.GetValue(@"Software\Microsoft\Office\15.0\Outlook\Resiliency\DisabledItems", "9") == null, "Older Office resiliency entry for LocalCorrect was kept"); passed++;
+
     Console.WriteLine($"PASS {passed} installer filesystem and registration ownership cases");
 } finally { Directory.Delete(testRoot, true); }
 
@@ -208,6 +224,8 @@ sealed class WowAliasHive : OwnedRegistration.IHive {
     }
     public bool Exists(string path) { string mapped; return Map(path, out mapped).Exists(mapped); }
     public object GetValue(string path, string name) { string mapped; return Map(path, out mapped).GetValue(mapped, name); }
+    public string[] GetValueNames(string path) { string mapped; return Map(path, out mapped).GetValueNames(mapped); }
     public void SetValue(string path, string name, object value, bool dword) { string mapped; Map(path, out mapped).SetValue(mapped, name, value, dword); }
+    public void DeleteValue(string path, string name) { string mapped; Map(path, out mapped).DeleteValue(mapped, name); }
     public void DeleteTree(string path) { string mapped; Map(path, out mapped).DeleteTree(mapped); }
 }
